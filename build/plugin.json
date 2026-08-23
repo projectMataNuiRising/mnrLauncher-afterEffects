@@ -1,0 +1,14 @@
+{
+  "name": "MNR Launcher Panel",
+  "version": "0.1.0",
+  "host": "after_effects",
+  "install_type": "scriptui_panel",
+  "_comment_install_type": "scriptui_panel installs into the per-user ScriptUI Panels folder, which needs no admin rights and no registry changes. A cep_extension type may be added later if a richer HTML panel is needed.",
+  "files": [
+    {
+      "source": "src/MNR_Launcher_Panel.jsx",
+      "install_as": "MNR_Launcher_Panel.jsx"
+    }
+  ],
+  "notes": "Appears under Window > MNR_Launcher_Panel.jsx in After Effects after a restart."
+}
