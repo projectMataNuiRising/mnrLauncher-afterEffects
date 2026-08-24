@@ -22,7 +22,7 @@
 (function (thisObj) {
 
     var PANEL_NAME = "MNR Launcher";
-    var PLUGIN_VERSION = "0.1.0";
+    var PLUGIN_VERSION = "0.2.0";
     var PIPELINE_ROOT = "P:/";
 
     function pipelineAvailable() {
@@ -78,6 +78,7 @@
             lines.push("Plugin version: " + PLUGIN_VERSION);
             lines.push("After Effects: " + app.version);
             lines.push("Pipeline drive: " + (pipelineAvailable() ? "found" : "not found"));
+            lines.push("Auto update: working, this line is new in 0.2.0");
 
             var proj = app.project;
             lines.push("Open project: " + (proj && proj.file ? proj.file.name : "none saved yet"));

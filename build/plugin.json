@@ -1,6 +1,6 @@
 {
   "name": "MNR Launcher Panel",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "host": "after_effects",
   "install_type": "scriptui_panel",
   "_comment_install_type": "scriptui_panel installs into the per-user ScriptUI Panels folder, which needs no admin rights and no registry changes. A cep_extension type may be added later if a richer HTML panel is needed.",
