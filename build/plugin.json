@@ -3,12 +3,16 @@
   "version": "0.2.0",
   "host": "after_effects",
   "install_type": "scriptui_panel",
-  "_comment_install_type": "scriptui_panel installs into the per-user ScriptUI Panels folder, which needs no admin rights and no registry changes. A cep_extension type may be added later if a richer HTML panel is needed.",
+  "_comment_install_type": "scriptui_panel. Installs into the After Effects install folder (Support Files/Scripts/ScriptUI Panels), which is the only location a dockable panel reliably loads from. That path needs a UAC prompt.",
   "files": [
     {
       "source": "src/MNR_Launcher_Panel.jsx",
       "install_as": "MNR_Launcher_Panel.jsx"
+    },
+    {
+      "source": "src/MNR_Feature_Catalog.jsx",
+      "install_as": "MNR_Feature_Catalog.jsx"
     }
   ],
-  "notes": "Appears under Window > MNR_Launcher_Panel.jsx in After Effects after a restart."
+  "notes": "MNR_Launcher_Panel.jsx is the real panel. MNR_Feature_Catalog.jsx is a showroom of every ScriptUI widget and a wide spread of AE scripting actions, each numbered, used to decide what the real panel should contain. Not intended to ship to artists."
 }
