@@ -30,6 +30,16 @@ It opens by itself as its own window every time After Effects starts
 off. Docked in the workspace instead, it reopens with the workspace and
 the startup window is skipped.
 
+MNR project settings (`src/MNR_Project_Settings_Startup.jsx`, also in
+`Scripts\Startup`) are set on the Untitled project at launch and on
+every New project from the Scene Manager: Timecode with Use Media
+Source, OCIO color managed with ACES 1.3 CG v1.0, 32 bpc, Tetrahedral,
+working space ACEScg, linearize and 1.0 gamma blending off, compensate
+for scene-referred profiles on. Existing projects are never changed.
+Default Base (12) and Display Color Space have no scripting access, and
+anything that did not take is listed in
+`%APPDATA%\MNR_Launcher\ae_startup.log`.
+
 Copy Path and Show in Explorer need Preferences > Scripting &
 Expressions > "Allow Scripts to Write Files and Access Network".
 

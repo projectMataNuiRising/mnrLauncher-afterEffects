@@ -22,6 +22,11 @@
       "source": "src/MNR_Scene_Manager_Startup.jsx",
       "install_as": "MNR_Scene_Manager_Startup.jsx",
       "folder": "Scripts/Startup"
+    },
+    {
+      "source": "src/MNR_Project_Settings_Startup.jsx",
+      "install_as": "MNR_Project_Settings_Startup.jsx",
+      "folder": "Scripts/Startup"
     }
   ],
   "notes": "MNR_Launcher_Panel.jsx is the real panel: the MNR Scene Manager (open, new, save as, rename pipeline .aep work files). It is the only file MNR Launcher installs. MNR_Feature_Catalog.jsx is a showroom of ScriptUI widgets, not shipped to artists. tools/ holds one-time admin scripts, not installed."

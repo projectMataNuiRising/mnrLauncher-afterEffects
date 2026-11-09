@@ -1088,6 +1088,11 @@
             // After Effects asks to save the current project first, if it changed.
             var proj = app.newProject();
             if (!proj) { say("New cancelled.", false); return; }
+            // MNR project settings (timecode, OCIO ACES 1.3, 32 bpc),
+            // from MNR_Project_Settings_Startup.jsx when it is installed.
+            try {
+                if ($.global.mnrApplyProjectSettings) { $.global.mnrApplyProjectSettings("new project"); }
+            } catch (e) {}
             app.project.save(new File(t.path));
             say("Created " + basename(t.path), true);
             fillFiles(t.path);
