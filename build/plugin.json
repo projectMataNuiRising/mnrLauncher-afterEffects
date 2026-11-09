@@ -11,8 +11,12 @@
   "_comment_install_type": "scriptui_panel. Installs into the After Effects install folder (Support Files/Scripts/ScriptUI Panels), which is the only location a dockable panel reliably loads from. That path needs a UAC prompt.",
   "files": [
     {
-      "source": "src/MNR_Launcher_Panel.jsx",
-      "install_as": "MNR_Launcher_Panel.jsx"
+      "source": "src/MNR_Scene_Manager.jsx",
+      "install_as": "MNR_Scene_Manager.jsx"
+    },
+    {
+      "source": "src/MNR_AE_Exporter.jsx",
+      "install_as": "MNR_AE_Exporter.jsx"
     },
     {
       "source": "src/MNR_Feature_Catalog.jsx",
@@ -29,5 +33,5 @@
       "folder": "Scripts/Startup"
     }
   ],
-  "notes": "MNR_Launcher_Panel.jsx is the real panel: the MNR Scene Manager (open, new, save as, rename pipeline .aep work files). It is the only file MNR Launcher installs. MNR_Feature_Catalog.jsx is a showroom of ScriptUI widgets, not shipped to artists. tools/ holds one-time admin scripts, not installed."
+  "notes": "MNR_Scene_Manager.jsx (open, new, save as, rename pipeline .aep work files; was MNR_Launcher_Panel.jsx) and MNR_AE_Exporter.jsx (publish renders: EXR, MP4 preview, PNG proxy) are the panels MNR Launcher installs, plus the two Scripts/Startup files. MNR_Feature_Catalog.jsx is a showroom of ScriptUI widgets, not shipped to artists. tools/ holds one-time admin scripts, not installed."
 }

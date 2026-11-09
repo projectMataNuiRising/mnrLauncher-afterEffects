@@ -91,20 +91,49 @@ present. The pipeline check uses a plain folder existence test and
 falls back to a "running standalone" state, so the panel still opens
 and works on a machine with no pCloud mounted.
 
+## MNR AE Exporter
+
+`src/MNR_AE_Exporter.jsx` sets up publish renders of a comp in the
+Render Queue, named and placed for the pipeline. Pick the comp, check
+the shot and task (filled in from where the `.aep` lives), the layer
+name (from the stop-motion TIFF sequence in the comp, else the comp
+name) and variant (default `main`), then Add to Render Queue or Add &
+Render. Into `<task>\export\publish\media\`:
+
+- `<name>\exr\<name>_[####].exr`  full res EXR, RGB + Alpha float, zip, ACEScg
+- `<name>.mp4`  half res H.264 over a 64 px checkerboard (0.6 / 0.4), sRGB
+- `<proxy name>\png\<proxy name>_[####].png`  1/4 or 1/8 res PNG, ACEScg
+  (`-proxy` in place of the variant)
+
+where `<name>` is e.g. `BFP102_SQ04_SH08_rotoKeyPrimary_gali01-main_v001`.
+Frames come from the comp's work area and the frame rate from the comp
+(with an override). Each output renders from its own comp in the
+`MNR Exports` project folder, so the artist's comp is never changed.
+
+Scripts cannot choose an output format, so the formats come from Output
+Module templates (`MNR EXR ACEScg`, `MNR MP4 Preview`, `MNR PNG Proxy`),
+made on first use from
+`P:\02-pipeline\apps\afterEffects\presets\MNR_Export_Presets.aep`: a
+project with one Render Queue item per output (OpenEXR Sequence,
+H.264, PNG Sequence) set up by hand, told apart by format. After
+changing it, press Load Presets in the exporter.
+
 ## Installing
 
 Normally handled by MNR Launcher, under Connect Software > After
 Effects. It downloads the panel straight from this repository, so
 whatever is on `main` is what gets installed.
 
-To install by hand, copy `src/MNR_Launcher_Panel.jsx` into the
-ScriptUI Panels path above and restart After Effects. It then appears
-in the `Window` menu.
+To install by hand, copy `src/MNR_Scene_Manager.jsx` and
+`src/MNR_AE_Exporter.jsx` into the ScriptUI Panels path above and
+restart After Effects. They then appear in the `Window` menu.
+(`MNR_Scene_Manager.jsx` used to be called `MNR_Launcher_Panel.jsx`.)
 
 ## Layout
 
 ```
-src/     the panel source (MNR_Launcher_Panel.jsx is what gets installed)
+src/     the panels (MNR_Scene_Manager.jsx, MNR_AE_Exporter.jsx) and
+         the Scripts\Startup files, all installed by MNR Launcher
 tools/   one-time admin scripts, not installed
 build/   plugin.json (the install manifest MNR Launcher reads) and
          stamp_version.py (run by the version action)

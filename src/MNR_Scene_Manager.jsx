@@ -20,7 +20,7 @@
     
         Installed and removed by MNR Launcher (Connect Software > After
         Effects). It is a ScriptUI panel: open it from Window >
-        MNR_Launcher_Panel.jsx and dock it, and After Effects reopens it
+        MNR_Scene_Manager.jsx and dock it, and After Effects reopens it
         with your workspace every time it starts. Run from File > Scripts
         instead, it opens as its own window, sized to the screen and
         centred. Either way it stays until you close it.

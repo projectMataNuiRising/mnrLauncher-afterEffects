@@ -1,5 +1,5 @@
 """
-Stamps the plugin version into the panel and the manifest.
+Stamps the plugin version into the panels and the manifest.
 
 Run by .github/workflows/stamp-version.yml on every push to main, so
 every change that reaches artists has its own number:
@@ -20,7 +20,7 @@ import json
 import re
 import sys
 
-PANEL = "src/MNR_Launcher_Panel.jsx"
+PANELS = ("src/MNR_Scene_Manager.jsx", "src/MNR_AE_Exporter.jsx")
 MANIFEST = "build/plugin.json"
 
 
@@ -30,16 +30,17 @@ def stamp(build, commit, built, channel="main"):
     base = str(manifest.get("version_base") or "0.3")
     version = "%s.%s" % (base, build)
 
-    with open(PANEL, "r", encoding="utf-8") as f:
-        text = f.read()
-    for name, value in (("PLUGIN_VERSION", version), ("PLUGIN_CHANNEL", channel),
-                        ("PLUGIN_BUILT", built), ("PLUGIN_COMMIT", commit)):
-        text, n = re.subn(r'(var %s\s*=\s*")[^"]*(")' % name,
-                          lambda m: m.group(1) + value + m.group(2), text, count=1)
-        if n != 1:
-            raise SystemExit("could not find %s in %s" % (name, PANEL))
-    with open(PANEL, "w", encoding="utf-8", newline="\n") as f:
-        f.write(text)
+    for panel in PANELS:
+        with open(panel, "r", encoding="utf-8") as f:
+            text = f.read()
+        for name, value in (("PLUGIN_VERSION", version), ("PLUGIN_CHANNEL", channel),
+                            ("PLUGIN_BUILT", built), ("PLUGIN_COMMIT", commit)):
+            text, n = re.subn(r'(var %s\s*=\s*")[^"]*(")' % name,
+                              lambda m: m.group(1) + value + m.group(2), text, count=1)
+            if n != 1:
+                raise SystemExit("could not find %s in %s" % (name, panel))
+        with open(panel, "w", encoding="utf-8", newline="\n") as f:
+            f.write(text)
 
     manifest.update(version=version, channel=channel, built=built, commit=commit)
     with open(MANIFEST, "w", encoding="utf-8", newline="\n") as f:

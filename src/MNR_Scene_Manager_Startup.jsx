@@ -25,7 +25,8 @@
 
     var MNR_KEEP_HOME_SCREEN = false;
     var OPEN_DELAY_MS = 2500;
-    var PANEL_FILE = "MNR_Launcher_Panel.jsx";
+    // Older installs named it MNR_Launcher_Panel.jsx.
+    var PANEL_FILES = ["MNR_Scene_Manager.jsx", "MNR_Launcher_Panel.jsx"];
 
     function log(text) {
         try {
@@ -43,21 +44,23 @@
     // ── Where the panel was installed: the app's own ScriptUI Panels
     // folder first, then the per-user one.
     function findPanel() {
-        var spots = [];
-        try { spots.push(Folder.startup.fsName + "/Scripts/ScriptUI Panels/" + PANEL_FILE); } catch (e) {}
+        var dirs = [];
+        try { dirs.push(Folder.startup.fsName + "/Scripts/ScriptUI Panels/"); } catch (e) {}
         try {
             var base = new Folder(Folder.userData.fsName + "/Adobe/After Effects");
             var major = String(app.version).split(".")[0];
             var subs = base.exists ? base.getFiles() : [];
             for (var i = 0; i < subs.length; i++) {
                 if (subs[i] instanceof Folder && File.decode(subs[i].name).split(".")[0] === major) {
-                    spots.push(subs[i].fsName + "/Scripts/ScriptUI Panels/" + PANEL_FILE);
+                    dirs.push(subs[i].fsName + "/Scripts/ScriptUI Panels/");
                 }
             }
         } catch (e) {}
-        for (var j = 0; j < spots.length; j++) {
-            var f = new File(spots[j]);
-            if (f.exists) { return f; }
+        for (var n = 0; n < PANEL_FILES.length; n++) {
+            for (var j = 0; j < dirs.length; j++) {
+                var f = new File(dirs[j] + PANEL_FILES[n]);
+                if (f.exists) { return f; }
+            }
         }
         return null;
     }
@@ -70,7 +73,7 @@
             if (w && w.visible) { return; }
             if (app.project && app.project.file) { log("started with a project, not opening"); return; }
             var panel = findPanel();
-            if (!panel) { log("could not find " + PANEL_FILE); return; }
+            if (!panel) { log("could not find " + PANEL_FILES[0]); return; }
             $.evalFile(panel);
             log("opened the Scene Manager from " + panel.fsName);
         } catch (e) {
