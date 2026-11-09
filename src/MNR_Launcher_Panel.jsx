@@ -494,10 +494,10 @@
     }
 
     function showInExplorer(path, isFile) {
-        var native = isFile ? new File(path).fsName : new Folder(path).fsName;
+        var nativePath = isFile ? new File(path).fsName : new Folder(path).fsName;
         if (isFile) {
             if (!needCommandLine()) { return; }
-            system.callSystem('explorer.exe /select,"' + native + '"');
+            system.callSystem('explorer.exe /select,"' + nativePath + '"');
         } else {
             new Folder(path).execute();
         }
@@ -1188,8 +1188,8 @@
         function doCopy() {
             var row = selectedRow();
             if (!row) { return; }
-            var native = new File(rowPath(row)).fsName;
-            if (copyToClipboard(native)) { say("Copied: " + native, true); }
+            var nativePath = new File(rowPath(row)).fsName;
+            if (copyToClipboard(nativePath)) { say("Copied: " + nativePath, true); }
         }
 
         function doExplorer() {
@@ -1234,10 +1234,27 @@
         }
     }
 
+    // A floating window that is already open is brought forward instead
+    // of opening a second one.
+    if (!(thisObj instanceof Panel)) {
+        var existing = $.global.mnrSceneManagerWindow;
+        if (existing && existing.visible) {
+            try { existing.active = true; } catch (e) {}
+            return;
+        }
+    }
+
     var built = buildUI(thisObj);
     if (built instanceof Window) {
+        // Kept on $.global so the window lives on after this script ends,
+        // and so the startup script can tell it is open.
+        $.global.mnrSceneManagerWindow = built;
+        built.onClose = function () { $.global.mnrSceneManagerWindow = null; };
         built.show();
         placeWindow(built);
+    } else {
+        // Docked in the workspace: the startup script then opens nothing.
+        $.global.mnrSceneManagerDocked = true;
     }
 
 })(this);

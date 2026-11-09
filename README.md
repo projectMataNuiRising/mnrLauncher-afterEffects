@@ -24,8 +24,11 @@ files:
   the next free 3-digit version, named
   `BFP102_SQ01_SH00_comp_main_v001.aep`.
 
-Docked, it stays in your workspace and reopens every time After
-Effects starts. Run from File > Scripts, it opens as its own window.
+It opens by itself as its own window every time After Effects starts
+(`src/MNR_Scene_Manager_Startup.jsx`, installed into After Effects'
+`Scripts\Startup` folder), in place of the Home screen, which it turns
+off. Docked in the workspace instead, it reopens with the workspace and
+the startup window is skipped.
 
 Copy Path and Show in Explorer need Preferences > Scripting &
 Expressions > "Allow Scripts to Write Files and Access Network".
