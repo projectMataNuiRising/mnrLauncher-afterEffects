@@ -11,9 +11,10 @@
 
     2. Turns off After Effects' Home screen (Preferences > Startup and
        Repair > Enable Home Screen), so it stops opening at launch. That
-       takes effect from the next launch. Adobe doesn't document the
-       setting's script name, so it is looked up in After Effects' own
-       preference files; what was found is logged to
+       takes effect from the next launch. The setting is "Show Welcome
+       Screen" in ["General Section"] of After Effects' preference files
+       (MNR Launcher also switches it off before it starts After Effects,
+       so it is off from the first launch); what was done is logged to
        %APPDATA%\MNR_Launcher\ae_startup.log.
        Set MNR_KEEP_HOME_SCREEN = true below to leave it alone.
 
@@ -121,8 +122,11 @@
                 var line = f.readln();
                 var s = line.match(/^\s*\["([^"]+)"\]/);
                 if (s) { section = s[1]; continue; }
-                var k = line.match(/^\s*"([^"]*[Hh]ome\s*[Ss]creen[^"]*)"\s*=\s*(\S+)/);
-                if (k && /enable|show|launch/i.test(k[1])) {
+                // "Show Welcome Screen" in ["General Section"] is the Home
+                // screen (found in After Effects 26.5); the rest are guesses
+                // for other versions.
+                var k = line.match(/^\s*"(Show Welcome Screen|[^"]*[Hh]ome\s*[Ss]creen[^"]*)"\s*=\s*(\S+)/);
+                if (k && /enable|show|launch|welcome/i.test(k[1])) {
                     found = { section: section, key: k[1], value: k[2] };
                     break;
                 }
