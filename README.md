@@ -5,15 +5,38 @@ After Effects extension for the Project Mata Nui Rising pipeline.
 Works standalone, with extra functionality when MNR Launcher and pCloud
 are available.
 
-## What this is right now
+## What this is
 
-A connection test. It installs a small dockable panel into After
-Effects so the install and removal path can be proven end to end
-before real tools get built on top of it.
+The MNR Scene Manager for After Effects, the twin of the Blender Scene
+Manager. It opens, creates, saves and renames pipeline `.aep` work
+files:
 
-The panel shows the plugin version, whether the pipeline drive is
-mounted, and has two buttons that read basic information back out of
-After Effects.
+- Project menu (every folder in `P:\01-projects`), Shot / Asset tabs,
+  search, and the episode > sequence > shot tree.
+- Tasks: `rotoKeyPrimary`, `rotoKeyUtility` and `comp` (tick "Show all
+  folders" for the rest). Tasks with no work files say `(no files)`.
+- Files: every user's work files in
+  `<task>/work/<user>/afterEffects/saveFiles`, newest save on top, with
+  a version list for older versions.
+- Open, New, Save As, Rename (one version or all), Copy Path, Show in
+  Explorer. Right-click a file for the same; double-click opens.
+- New and Save As save into your own folder (the MNR Launcher user) at
+  the next free 3-digit version, named
+  `BFP102_SQ01_SH00_comp_main_v001.aep`.
+
+Docked, it stays in your workspace and reopens every time After
+Effects starts. Run from File > Scripts, it opens as its own window.
+
+Copy Path and Show in Explorer need Preferences > Scripting &
+Expressions > "Allow Scripts to Write Files and Access Network".
+
+## One-time tools
+
+`tools/MNR_Fix_Shot_Work_Files_oneTime.jsx` renames `project-main` to
+`main`, pads versions to 3 digits, fixes names that disagree with their
+folders, and moves loose `.aep` files into `afterEffects/saveFiles`.
+It shows every change and asks before doing anything. Not installed by
+the launcher; run it once from File > Scripts > Run Script File.
 
 ## Why a ScriptUI panel and not a CEP extension
 
@@ -52,6 +75,7 @@ in the `Window` menu.
 ## Layout
 
 ```
-src/     the panel source
+src/     the panel source (MNR_Launcher_Panel.jsx is what gets installed)
+tools/   one-time admin scripts, not installed
 build/   plugin.json, the install manifest MNR Launcher reads
 ```
