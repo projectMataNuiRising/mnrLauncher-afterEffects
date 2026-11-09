@@ -1,0 +1,47 @@
+name: Stamp plugin version
+
+# Every push to main gets its own plugin version (0.3.<build>), written
+# into the panel and build/plugin.json, so MNR Launcher can show exactly
+# which version is installed and spot when a newer one is out.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: stamp-version
+  cancel-in-progress: false
+
+jobs:
+  stamp:
+    # The stamp commit itself is pushed with GITHUB_TOKEN, which never
+    # starts another run, so this cannot loop. The check is belt and braces.
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Stamp
+        run: |
+          BUILD=$(( $(git rev-list --count HEAD) + 1 ))
+          COMMIT=$(git rev-parse --short HEAD)
+          BUILT=$(TZ=UTC git log -1 --format=%cd --date=format-local:'%Y-%m-%d %H:%M UTC' HEAD)
+          python build/stamp_version.py "$BUILD" "$COMMIT" "$BUILT" main
+
+      - name: Commit the stamp
+        run: |
+          if git diff --quiet; then
+            echo "Nothing to stamp"
+            exit 0
+          fi
+          VERSION=$(python -c "import json;print(json.load(open('build/plugin.json'))['version'])")
+          git config user.name "github-actions[bot]"
+          git config user.email "41898699+github-actions[bot]@users.noreply.github.com"
+          git commit -am "Stamp plugin version main $VERSION"
+          git push

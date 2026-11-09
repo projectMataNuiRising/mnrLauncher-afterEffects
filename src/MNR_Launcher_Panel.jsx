@@ -1,63 +1,75 @@
-/*
-    MNR Scene Manager  (After Effects)
-    ----------------------------------
-    Project Mata Nui Rising, After Effects side of the pipeline.
-    The After Effects twin of the Blender Scene Manager.
-
-    Installed and removed by MNR Launcher (Connect Software > After
-    Effects). It is a ScriptUI panel: open it from Window >
-    MNR_Launcher_Panel.jsx and dock it, and After Effects reopens it
-    with your workspace every time it starts. Run from File > Scripts
-    instead, it opens as its own window, sized to the screen and
-    centred. Either way it stays until you close it.
-
-    WHAT IT DOES
-
-        Project menu   every project folder in P:\01-projects
-        Shot | Asset   Shot: episode > sequence > shot (03-shot)
-                       Asset: category > asset (02-asset)
-                       # template folders are hidden. Search filters it.
-        Tasks          rotoKeyPrimary, rotoKeyUtility and comp, unless
-                       "Show all folders" is ticked. Tasks with no .aep
-                       work files are marked (no files).
-        Files          every user's .aep work files in the task:
-                         <task>/work/<user>/afterEffects/saveFiles
-                         (and loose ones in work/<user> or
-                         work/<user>/afterEffects)
-                       One row per name + user, newest save on top.
-                       Version list below picks an older version.
-                       Names that don't follow the pattern are listed
-                       by their full file name.
-                         shots   BFP102_SQ01_SH00_comp_<name>_v001.aep
-                         assets  BFP_cgAsset_<asset>_<name>_v001.aep
-        Actions        Open, New (a new project saved straight away as
-                       <name>, default main, at the next free version),
-                       Save As, Rename (one version or all of them),
-                       Copy Path, Show in Explorer. Right-click a file
-                       for the same. Double-click opens.
-                       New and Save As always save into YOUR folder
-                       (the MNR Launcher user), making
-                       afterEffects/saveFiles and sourceFiles.
-                       Versions are always 3 digits (v54 reads as v054).
-                       After Effects itself asks to save the open
-                       project first, only if it has changes.
-                       Nothing is ever deleted.
-
-    NEEDS
-
-        Copy Path and Show in Explorer use the command line, which
-        After Effects only allows with Preferences > Scripting &
-        Expressions > "Allow Scripts to Write Files and Access
-        Network" ticked. Everything else works without it.
-
-    Written for ExtendScript (ES3): no JSON, Array.indexOf, trim or
-    forEach are relied on.
-*/
-
+/* MNR Scene Manager (After Effects). Notes below. */
 (function (thisObj) {
 
-    var PANEL_NAME = "MNR Scene Manager";
+    // ── Version stamp ──────────────────────────────────────────────
+    // Written by the "Stamp plugin version" GitHub action on every push
+    // to main. MNR Launcher reads these four lines out of the installed
+    // file, so they stay at the very top. Change only version_base in
+    // build/plugin.json by hand.
     var PLUGIN_VERSION = "0.3.0";
+    var PLUGIN_CHANNEL = "main";
+    var PLUGIN_BUILT = "";
+    var PLUGIN_COMMIT = "";
+    // ───────────────────────────────────────────────────────────────
+
+    /*
+        MNR Scene Manager  (After Effects)
+        ----------------------------------
+        Project Mata Nui Rising, After Effects side of the pipeline.
+        The After Effects twin of the Blender Scene Manager.
+    
+        Installed and removed by MNR Launcher (Connect Software > After
+        Effects). It is a ScriptUI panel: open it from Window >
+        MNR_Launcher_Panel.jsx and dock it, and After Effects reopens it
+        with your workspace every time it starts. Run from File > Scripts
+        instead, it opens as its own window, sized to the screen and
+        centred. Either way it stays until you close it.
+    
+        WHAT IT DOES
+    
+            Project menu   every project folder in P:\01-projects
+            Shot | Asset   Shot: episode > sequence > shot (03-shot)
+                           Asset: category > asset (02-asset)
+                           # template folders are hidden. Search filters it.
+            Tasks          rotoKeyPrimary, rotoKeyUtility and comp, unless
+                           "Show all folders" is ticked. Tasks with no .aep
+                           work files are marked (no files).
+            Files          every user's .aep work files in the task:
+                             <task>/work/<user>/afterEffects/saveFiles
+                             (and loose ones in work/<user> or
+                             work/<user>/afterEffects)
+                           One row per name + user, newest save on top.
+                           Version list below picks an older version.
+                           Names that don't follow the pattern are listed
+                           by their full file name.
+                             shots   BFP102_SQ01_SH00_comp_<name>_v001.aep
+                             assets  BFP_cgAsset_<asset>_<name>_v001.aep
+            Actions        Open, New (a new project saved straight away as
+                           <name>, default main, at the next free version),
+                           Save As, Rename (one version or all of them),
+                           Copy Path, Show in Explorer. Right-click a file
+                           for the same. Double-click opens.
+                           New and Save As always save into YOUR folder
+                           (the MNR Launcher user), making
+                           afterEffects/saveFiles and sourceFiles.
+                           Versions are always 3 digits (v54 reads as v054).
+                           After Effects itself asks to save the open
+                           project first, only if it has changes.
+                           Nothing is ever deleted.
+    
+        NEEDS
+    
+            Copy Path and Show in Explorer use the command line, which
+            After Effects only allows with Preferences > Scripting &
+            Expressions > "Allow Scripts to Write Files and Access
+            Network" ticked. Everything else works without it.
+    
+        Written for ExtendScript (ES3): no JSON, Array.indexOf, trim or
+        forEach are relied on.
+    */
+
+
+    var PANEL_NAME = "MNR Scene Manager";
 
     // ─────────────────────────────────────────────
     // Settings
@@ -595,6 +607,9 @@
         styleText(projectLabel, C_ACCENT, 12, false);
         var userLabel = header.add("statictext", undefined, "User:  " + me);
         styleText(userLabel, C_DIM, 12, false);
+        var verLabel = header.add("statictext", undefined, PLUGIN_CHANNEL + " " + PLUGIN_VERSION);
+        verLabel.helpTip = "Built " + (PLUGIN_BUILT || "?") + (PLUGIN_COMMIT ? "  (" + PLUGIN_COMMIT + ")" : "");
+        styleText(verLabel, C_DIM, 10, false);
 
         // ── Body
         var body = win.add("group");

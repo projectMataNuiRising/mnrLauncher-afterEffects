@@ -30,6 +30,22 @@ Effects starts. Run from File > Scripts, it opens as its own window.
 Copy Path and Show in Explorer need Preferences > Scripting &
 Expressions > "Allow Scripts to Write Files and Access Network".
 
+## Versions
+
+Every push to `main` gets its own version, stamped by the "Stamp plugin
+version" GitHub action into the panel and `build/plugin.json`:
+
+```
+main 0.3.14     channel, then version_base.<build number>
+built           when that commit was made (UTC)
+commit          the short commit id, to find the change on GitHub
+```
+
+MNR Launcher reads the stamp out of the installed panel, shows it on
+the After Effects tile, and turns the link yellow when a newer version
+is published. To mark a bigger release, change `version_base` in
+`build/plugin.json` (0.3 -> 0.4); the build number keeps counting.
+
 ## One-time tools
 
 `tools/MNR_Fix_Shot_Work_Files_oneTime.jsx` renames `project-main` to
@@ -77,5 +93,6 @@ in the `Window` menu.
 ```
 src/     the panel source (MNR_Launcher_Panel.jsx is what gets installed)
 tools/   one-time admin scripts, not installed
-build/   plugin.json, the install manifest MNR Launcher reads
+build/   plugin.json (the install manifest MNR Launcher reads) and
+         stamp_version.py (run by the version action)
 ```
