@@ -122,7 +122,7 @@ When none is there, the MNR ones are made from `src/MNR_Export_Presets.aep`
 (installed next to the panel by MNR Launcher, or
 `P:\02-pipeline\apps\afterEffects\presets\`): a project with one
 Render Queue item per output (OpenEXR Sequence, H.264, PNG Sequence),
-told apart by format. After changing it, press Load Presets.
+told apart by format. When it changes, the next Add to Render Queue picks it up by itself.
 
 ## Installing
 

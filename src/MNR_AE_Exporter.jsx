@@ -79,8 +79,9 @@
               PNG Sequence      RGB + Alpha, Millions of Colors+,
                                 Use Comp Frame Number, Output Color Space
                                 scene_linear: ACEScg
-            (any comp, any file name, they are told apart by format). After
-            changing that project, press Load Presets to pick it up.
+            (any comp, any file name, they are told apart by format). When
+            that project changes (a newer file), the next Add to Render
+            Queue picks it up by itself. Nothing for artists to do.
 
         NEEDS
 
@@ -582,20 +583,38 @@
         return out;
     }
 
-    function loadPresets() {
+    function findPresetsFile() {
+        var spots = presetsFiles();
+        for (var s = 0; s < spots.length; s++) {
+            if (new File(spots[s]).exists) { return new File(spots[s]); }
+        }
+        return null;
+    }
+
+    // Which presets file (and how new) the templates on this machine were
+    // made from, kept in After Effects' own settings.
+    var STAMP_SECTION = "MNR AE Exporter";
+    var STAMP_KEY = "presetsStamp";
+
+    function presetsStamp(f) {
+        try { return f.fsName + "|" + f.modified.getTime(); } catch (e) { return f.fsName; }
+    }
+
+    function savedStamp() {
+        try {
+            return app.settings.haveSetting(STAMP_SECTION, STAMP_KEY) ?
+                app.settings.getSetting(STAMP_SECTION, STAMP_KEY) : "";
+        } catch (e) { return ""; }
+    }
+
+    function saveStamp(stamp) {
+        try { app.settings.saveSetting(STAMP_SECTION, STAMP_KEY, stamp); } catch (e) {}
+    }
+
+    function loadPresets(f) {
         /* Imports the presets project, saves its output modules as the MNR
            templates, then removes everything it imported. Returns the
            template names made. */
-        var spots = presetsFiles();
-        var f = null;
-        for (var s = 0; s < spots.length; s++) {
-            if (new File(spots[s]).exists) { f = new File(spots[s]); break; }
-        }
-        if (!f) {
-            throw new Error("The presets project is missing. Looked for:\n" +
-                spots.join("\n").replace(/\//g, "\\") +
-                "\n\nReinstall the AE plugin from MNR Launcher.");
-        }
         var rq = app.project.renderQueue;
         var before = rq.numItems;
         var io = new ImportOptions(f);
@@ -904,9 +923,6 @@
         // ── Footer
         var footer = row(win);
         footer.alignment = ["fill", "bottom"];
-        var bPresets = flatButton(footer, "Load Presets", 120);
-        bPresets.helpTip = "Remake the MNR output templates from " + PRESETS_NAME + "\n" +
-            "(installed with the plugin, or in P:\\02-pipeline\\apps\\afterEffects\\presets).";
         var status = footer.add("statictext", undefined, "", { truncate: "middle" });
         status.alignment = ["fill", "center"];
         styleText(status, C_DIM, 11, false);
@@ -1097,17 +1113,23 @@
                     var item = app.project.renderQueue.items.add(rc);
                     made.push({ kind: todo[i], comp: rc, item: item, out: out });
                 }
-                // Templates are checked on the first item, and made from the
-                // presets project when missing.
+                // Templates are made on this machine from the presets project
+                // when they are missing, or when the presets project is newer
+                // than the one they were made from.
+                var pf = findPresetsFile();
                 var missing = missingTemplates(made[0].item.outputModule(1), todo);
-                if (missing.length) {
-                    say("Loading the MNR presets...");
-                    loadPresets();
+                if (pf && (missing.length || savedStamp() !== presetsStamp(pf))) {
+                    say("Setting up the MNR export presets...");
+                    loadPresets(pf);
+                    saveStamp(presetsStamp(pf));
                     missing = missingTemplates(made[0].item.outputModule(1), todo);
                 }
                 if (missing.length) {
-                    throw new Error("These output templates are missing, and the presets project " +
-                        "did not have them:\n  " + missing.join("\n  "));
+                    throw new Error("These output templates are missing:\n  " + missing.join("\n  ") +
+                        "\n\n" + (pf ? "The presets project does not have them:\n" + pf.fsName :
+                        "No presets project found. Looked for:\n" +
+                        presetsFiles().join("\n").replace(/\//g, "\\") +
+                        "\n\nReinstall the AE plugin from MNR Launcher."));
                 }
                 for (i = 0; i < made.length; i++) {
                     setUpItem(made[i].item, made[i].kind, made[i].out, sp);
@@ -1128,22 +1150,6 @@
             if (renderNow) {
                 try { app.project.renderQueue.render(); } catch (e3) { say("Render stopped: " + e3, false); }
             }
-        }
-
-        function doPresets() {
-            if (st.busy) { return; }
-            st.busy = true;
-            app.beginUndoGroup(PANEL_NAME + " presets");
-            try {
-                var made = loadPresets();
-                say(made.length ? "Loaded: " + made.join(", ") : "No EXR, H.264 or PNG items found in the presets project.",
-                    made.length === 3 ? true : false);
-            } catch (e) {
-                say("Presets not loaded.", false);
-                alert(String(e.message || e), PANEL_NAME);
-            }
-            app.endUndoGroup();
-            st.busy = false;
         }
 
         // ─────────── events ───────────
@@ -1180,7 +1186,6 @@
         };
         bQueue.onClick = function () { doQueue(false); };
         bRender.onClick = function () { doQueue(true); };
-        bPresets.onClick = doPresets;
 
         // ─────────── first fill ───────────
 
