@@ -19,6 +19,11 @@
       "install_as": "MNR_AE_Exporter.jsx"
     },
     {
+      "source": "src/MNR_Export_Presets.aep",
+      "install_as": "MNR_Export_Presets.aep",
+      "optional": true
+    },
+    {
       "source": "src/MNR_Feature_Catalog.jsx",
       "install_as": "MNR_Feature_Catalog.jsx"
     },

@@ -95,28 +95,34 @@ and works on a machine with no pCloud mounted.
 
 `src/MNR_AE_Exporter.jsx` sets up publish renders of a comp in the
 Render Queue, named and placed for the pipeline. Pick the comp, check
-the shot and task (filled in from where the `.aep` lives), the layer
-name (from the stop-motion TIFF sequence in the comp, else the comp
-name) and variant (default `main`), then Add to Render Queue or Add &
-Render. Into `<task>\export\publish\media\`:
+the shot and task (filled in from where the `.aep` lives; Any task
+lists every task folder in the shot; Open Folder shows the media folder
+in File Explorer), the layer name (from the stop-motion TIFF sequence
+in the comp, else the comp name) and variant (default `main`), then Add
+to Render Queue or Add & Render. Into `<task>\export\publish\media\`:
 
-- `<name>\exr\<name>_[####].exr`  full res EXR, RGB + Alpha float, zip, ACEScg
-- `<name>.mp4`  half res H.264 over a 64 px checkerboard (0.6 / 0.4), sRGB
-- `<proxy name>\png\<proxy name>_[####].png`  1/4 or 1/8 res PNG, ACEScg
+- `<name>\exr\<name>.[####].exr`  full res EXR, RGB + Alpha float, zip, ACEScg
+- `<name>.mp4`  1/2 or 1/4 res H.264 over a 64 px checkerboard (0.6 / 0.4), sRGB
+- `<proxy name>\png\<proxy name>.[####].png`  1/4 or 1/8 res PNG, ACEScg
   (`-proxy` in place of the variant)
 
 where `<name>` is e.g. `BFP102_SQ04_SH08_rotoKeyPrimary_gali01-main_v001`.
-Frames come from the comp's work area and the frame rate from the comp
-(with an override). Each output renders from its own comp in the
-`MNR Exports` project folder, so the artist's comp is never changed.
+The size of each output is shown in the panel. Frames come from the
+comp's work area and the frame rate from the comp (with an override).
+Each output renders from its own comp in the `MNR Exports` project
+folder, made at the output size, so the artist's comp is never changed
+and the templates' own Resize and Crop are switched off.
 
 Scripts cannot choose an output format, so the formats come from Output
-Module templates (`MNR EXR ACEScg`, `MNR MP4 Preview`, `MNR PNG Proxy`),
-made on first use from
-`P:\02-pipeline\apps\afterEffects\presets\MNR_Export_Presets.aep`: a
-project with one Render Queue item per output (OpenEXR Sequence,
-H.264, PNG Sequence) set up by hand, told apart by format. After
-changing it, press Load Presets in the exporter.
+Module templates. For each output either name works:
+`MNR EXR ACEScg` / `BFP_exportSetting_openEXR_outputModule_v001`,
+`MNR MP4 Preview` / `BFP_exportSetting_mp4Preview_outputModule_v001`,
+`MNR PNG Proxy` / `BFP_exportSetting_proxyPng_outputModule_v001`.
+When none is there, the MNR ones are made from `src/MNR_Export_Presets.aep`
+(installed next to the panel by MNR Launcher, or
+`P:\02-pipeline\apps\afterEffects\presets\`): a project with one
+Render Queue item per output (OpenEXR Sequence, H.264, PNG Sequence),
+told apart by format. After changing it, press Load Presets.
 
 ## Installing
 

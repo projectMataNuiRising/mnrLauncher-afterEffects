@@ -40,14 +40,18 @@
 
         WHAT IT WRITES  (name = BFP102_SQ04_SH08_rotoKeyPrimary_gali01-main_v001)
 
-            EXR      media\<name>\exr\<name>_[####].exr
+            EXR      media\<name>\exr\<name>.[####].exr
                      full res, OpenEXR RGB + Alpha, float, zip, ACEScg
             MP4      media\<name>.mp4
-                     half res, H.264, over a 64 px checkerboard (0.6 / 0.4),
-                     sRGB - Display/Un-tone-mapped
-            Proxy    media\<proxy name>\png\<proxy name>_[####].png
+                     1/2 or 1/4 res, H.264, over a 64 px checkerboard
+                     (0.6 / 0.4), sRGB - Display/Un-tone-mapped
+            Proxy    media\<proxy name>\png\<proxy name>.[####].png
                      1/4 or 1/8 res PNG, RGB + Alpha, ACEScg. The proxy name
                      has "proxy" in place of the variant (gali01-proxy).
+
+            The size of each is shown under Outputs. Sizes are set by the
+            exporter (the comp it renders from is made at that size), so
+            the templates' own Resize and Crop are switched off.
 
             Each output renders from its own comp in the "MNR Exports"
             folder of the Project panel (your comp nested inside, scaled
@@ -57,10 +61,15 @@
         PRESETS
 
             After Effects scripts cannot pick an output format (EXR, H.264,
-            PNG) or its options, so those come from Output Module templates:
-              MNR EXR ACEScg, MNR MP4 Preview, MNR PNG Proxy
-            When they are missing, they are made from the presets project:
-              P:\02-pipeline\apps\afterEffects\presets\MNR_Export_Presets.aep
+            PNG) or its options, so those come from Output Module templates.
+            Either name works for each:
+              MNR EXR ACEScg    or BFP_exportSetting_openEXR_outputModule_v001
+              MNR MP4 Preview   or BFP_exportSetting_mp4Preview_outputModule_v001
+              MNR PNG Proxy     or BFP_exportSetting_proxyPng_outputModule_v001
+            When none is there, the MNR ones are made from the presets
+            project, MNR_Export_Presets.aep, looked for next to this script
+            (MNR Launcher installs it with the plugin) and then in
+              P:\02-pipeline\apps\afterEffects\presets\
             which holds one Render Queue item per output, set up by hand:
               OpenEXR Sequence  RGB + Alpha, Floating Point+, Zip,
                                 Use Comp Frame Number, Output Color Space
@@ -100,12 +109,21 @@
     var CHECKER_SIZE = 64;
     var CHECKER_LIGHT = 0.6;
     var CHECKER_DARK = 0.4;
-    var MP4_SCALE = 2;
+    var PRESETS_NAME = "MNR_Export_Presets.aep";
+    var SCRIPT_DIR = (function () {
+        try { return File($.fileName).parent.fsName.replace(/\\/g, "/"); } catch (e) { return ""; }
+    }());
+    var MP4_SCALES = [2, 4];
     var PROXY_SCALES = [4, 8];
+    var SCALE_NAMES = { 1: "full res", 2: "1/2 res", 4: "1/4 res", 8: "1/8 res" };
+    // template: the name the exporter saves; names: any of these is used.
     var OUTPUTS = {
-        exr: { template: "MNR EXR ACEScg", format: /exr/i },
-        mp4: { template: "MNR MP4 Preview", format: /264/ },
-        png: { template: "MNR PNG Proxy", format: /png/i }
+        exr: { template: "MNR EXR ACEScg", format: /exr/i,
+               names: ["MNR EXR ACEScg", "BFP_exportSetting_openEXR_outputModule_v001"] },
+        mp4: { template: "MNR MP4 Preview", format: /264/,
+               names: ["MNR MP4 Preview", "BFP_exportSetting_mp4Preview_outputModule_v001"] },
+        png: { template: "MNR PNG Proxy", format: /png/i,
+               names: ["MNR PNG Proxy", "BFP_exportSetting_proxyPng_outputModule_v001"] }
     };
     var TASK_NOTES = {
         rotoKeyPrimary: "Name the layer the same as the stop-motion layer it came from " +
@@ -301,18 +319,26 @@
         return best + 1;
     }
 
-    function makePlan(ctx, layer, variant, version, proxyScale) {
+    function outputSize(width, height, scale, even) {
+        /* [w, h] an output renders at. H.264 wants even sizes. */
+        var w = Math.max(1, Math.round(width / scale));
+        var h = Math.max(1, Math.round(height / scale));
+        if (even) { w += w % 2; h += h % 2; }
+        return [w, h];
+    }
+
+    function makePlan(ctx, layer, variant, version, proxyScale, mp4Scale) {
         var media = mediaDir(ctx);
         var name = namePrefix(ctx, layer, variant) + "_v" + pad3(version);
         var proxyName = namePrefix(ctx, layer, proxyVariant(variant)) + "_v" + pad3(version);
         return {
             name: name, proxyName: proxyName, media: media,
-            exr: { dir: join(media, name, "exr"), file: join(media, name, "exr", name + "_[####].exr"),
+            exr: { dir: join(media, name, "exr"), file: join(media, name, "exr", name + ".[####].exr"),
                    comp: name + " [exr]", scale: 1, checker: false },
             mp4: { dir: media, file: join(media, name + ".mp4"),
-                   comp: name + " [mp4]", scale: MP4_SCALE, checker: true },
+                   comp: name + " [mp4]", scale: mp4Scale || MP4_SCALES[0], checker: true },
             png: { dir: join(media, proxyName, "png"),
-                   file: join(media, proxyName, "png", proxyName + "_[####].png"),
+                   file: join(media, proxyName, "png", proxyName + ".[####].png"),
                    comp: proxyName + " [png]", scale: proxyScale, checker: false }
         };
     }
@@ -344,12 +370,29 @@
         return miss.length ? "Fill in: " + miss.join(", ") + "." : "";
     }
 
+    function templateFor(have, kind) {
+        /* The first of an output's template names that After Effects has, or "". */
+        var names = OUTPUTS[kind].names;
+        for (var i = 0; i < names.length; i++) {
+            if (inList(have, names[i])) { return names[i]; }
+        }
+        return "";
+    }
+
+    function presetsFiles() {
+        var out = [];
+        if (SCRIPT_DIR) { out.push(join(SCRIPT_DIR, PRESETS_NAME)); }
+        out.push(PRESETS_FILE);
+        return out;
+    }
+
     var CORE = {
         FS: FS, parseAepPath: parseAepPath, firstToken: firstToken, cleanLayer: cleanLayer,
         cleanVariant: cleanVariant, proxyVariant: proxyVariant, stemOf: stemOf,
         parseLayerName: parseLayerName, mediaDir: mediaDir, nextVersion: nextVersion,
         shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
+        outputSize: outputSize, templateFor: templateFor, presetsFiles: presetsFiles,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
     if (typeof module !== "undefined" && module.exports) {
@@ -508,9 +551,8 @@
     function renderComp(folder, src, out, fps) {
         /* The comp an output renders from: src nested, scaled, maybe on the checker. */
         removeCompNamed(folder, out.comp);
-        var w = Math.max(1, Math.round(src.width / out.scale));
-        var h = Math.max(1, Math.round(src.height / out.scale));
-        if (out.checker) { w += w % 2; h += h % 2; }       // H.264 wants even sizes
+        var size = outputSize(src.width, src.height, out.scale, out.checker);
+        var w = size[0], h = size[1];
         var c = app.project.items.addComp(out.comp, w, h, src.pixelAspect, src.duration, fps);
         c.parentFolder = folder;
         try { c.displayStartTime = src.displayStartTime; } catch (e) {}
@@ -535,7 +577,7 @@
         var have = templateList(om);
         var out = [];
         for (var i = 0; i < kinds.length; i++) {
-            if (!inList(have, OUTPUTS[kinds[i]].template)) { out.push(OUTPUTS[kinds[i]].template); }
+            if (!templateFor(have, kinds[i])) { out.push(OUTPUTS[kinds[i]].template); }
         }
         return out;
     }
@@ -544,8 +586,16 @@
         /* Imports the presets project, saves its output modules as the MNR
            templates, then removes everything it imported. Returns the
            template names made. */
-        var f = new File(PRESETS_FILE);
-        if (!f.exists) { throw new Error("The presets project is missing:\n" + f.fsName); }
+        var spots = presetsFiles();
+        var f = null;
+        for (var s = 0; s < spots.length; s++) {
+            if (new File(spots[s]).exists) { f = new File(spots[s]); break; }
+        }
+        if (!f) {
+            throw new Error("The presets project is missing. Looked for:\n" +
+                spots.join("\n").replace(/\//g, "\\") +
+                "\n\nReinstall the AE plugin from MNR Launcher.");
+        }
         var rq = app.project.renderQueue;
         var before = rq.numItems;
         var io = new ImportOptions(f);
@@ -577,13 +627,28 @@
         return made;
     }
 
+    function noResize(om) {
+        var keys = ["Resize", "Crop"];
+        for (var i = 0; i < keys.length; i++) {
+            var s = {};
+            s[keys[i]] = false;
+            try { om.setSettings(s); } catch (e) {
+                try { s[keys[i]] = "false"; om.setSettings(s); } catch (e2) {}
+            }
+        }
+    }
+
     function setUpItem(item, kind, out, span) {
         try { item.applyTemplate(RENDER_TEMPLATE); } catch (e) {}
         item.timeSpanStart = span.start;
         item.timeSpanDuration = span.duration;
         var om = item.outputModule(1);
-        om.applyTemplate(OUTPUTS[kind].template);
+        om.applyTemplate(templateFor(templateList(om), kind));
         om = item.outputModule(1);     // re-fetch, changing an output module can invalidate it
+        // Sizes come from the render comp, so a template's own Resize and
+        // Crop would scale twice.
+        noResize(om);
+        om = item.outputModule(1);
         om.file = new File(out.file);
         return item;
     }
@@ -799,7 +864,10 @@
         var doExr = r5a.add("checkbox", undefined, "EXR");
         doExr.value = true;
         doExr.preferredSize.width = 110;
-        var exrInfo = label(r5a, "full res  ·  RGB + Alpha float, zip  ·  ACEScg");
+        var exrSize = label(r5a, "");
+        exrSize.characters = 22;
+        styleText(exrSize, C_WHITE, 11, true);
+        var exrInfo = label(r5a, "OpenEXR RGB + Alpha float, zip  ·  ACEScg");
         styleText(exrInfo, C_DIM, 11, false);
         var exrPath = label(s5, "");
         exrPath.characters = 80;
@@ -808,7 +876,12 @@
         var doMp4 = r5b.add("checkbox", undefined, "MP4 preview");
         doMp4.value = true;
         doMp4.preferredSize.width = 110;
-        var mp4Info = label(r5b, "half res  ·  H.264 on a " + CHECKER_SIZE + " px checkerboard  ·  sRGB");
+        var mp4ScaleList = r5b.add("dropdownlist", undefined, ["1/2 res", "1/4 res"]);
+        mp4ScaleList.selection = 0;
+        var mp4Size = label(r5b, "");
+        mp4Size.characters = 12;
+        styleText(mp4Size, C_WHITE, 11, true);
+        var mp4Info = label(r5b, "H.264 on a " + CHECKER_SIZE + " px checkerboard  ·  sRGB");
         styleText(mp4Info, C_DIM, 11, false);
         var mp4Path = label(s5, "");
         mp4Path.characters = 80;
@@ -819,7 +892,10 @@
         doPng.preferredSize.width = 110;
         var scaleList = r5c.add("dropdownlist", undefined, ["1/4 res", "1/8 res"]);
         scaleList.selection = 0;
-        var pngInfo = label(r5c, "RGB + Alpha  ·  ACEScg");
+        var pngSize = label(r5c, "");
+        pngSize.characters = 12;
+        styleText(pngSize, C_WHITE, 11, true);
+        var pngInfo = label(r5c, "PNG RGB + Alpha  ·  ACEScg");
         styleText(pngInfo, C_DIM, 11, false);
         var pngPath = label(s5, "");
         pngPath.characters = 80;
@@ -829,7 +905,8 @@
         var footer = row(win);
         footer.alignment = ["fill", "bottom"];
         var bPresets = flatButton(footer, "Load Presets", 120);
-        bPresets.helpTip = "Remake the MNR output templates from\n" + PRESETS_FILE;
+        bPresets.helpTip = "Remake the MNR output templates from " + PRESETS_NAME + "\n" +
+            "(installed with the plugin, or in P:\\02-pipeline\\apps\\afterEffects\\presets).";
         var status = footer.add("statictext", undefined, "", { truncate: "middle" });
         status.alignment = ["fill", "center"];
         styleText(status, C_DIM, 11, false);
@@ -853,6 +930,21 @@
         }
 
         function proxyScale() { return PROXY_SCALES[scaleList.selection ? scaleList.selection.index : 0]; }
+
+        function mp4Scale() { return MP4_SCALES[mp4ScaleList.selection ? mp4ScaleList.selection.index : 0]; }
+
+        function sizeText(scale, even) {
+            var c = comp();
+            if (!c) { return ""; }
+            var wh = outputSize(c.width, c.height, scale, even);
+            return wh[0] + " x " + wh[1] + (scale === 1 ? "  (" + SCALE_NAMES[1] + ")" : "");
+        }
+
+        function updateSizes() {
+            exrSize.text = sizeText(1, false);
+            mp4Size.text = sizeText(mp4Scale(), true);
+            pngSize.text = sizeText(proxyScale(), false);
+        }
 
         function kinds() {
             var out = [];
@@ -901,6 +993,7 @@
             if (newVersion && layer && x.ep && x.sq && x.sh) {
                 versionText.text = pad3(nextVersion(x, layer, variant));
             }
+            updateSizes();
             taskNote.text = TASK_NOTES[x.task] ||
                 (x.task ? "Publishing to " + x.task + ", which is not an After Effects task." : "");
             var err = checkInputs(x, layer, variant, versionText.text);
@@ -909,7 +1002,7 @@
                 exrPath.text = mp4Path.text = pngPath.text = "";
                 return;
             }
-            var p = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale());
+            var p = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale(), mp4Scale());
             namePreview.text = p.name;
             exrPath.text = "    " + p.exr.file.replace(/\//g, "\\");
             mp4Path.text = "    " + p.mp4.file.replace(/\//g, "\\");
@@ -979,7 +1072,7 @@
                       "Starting After Effects from MNR Launcher ticks it for you.", PANEL_NAME);
                 return;
             }
-            var plan = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale());
+            var plan = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale(), mp4Scale());
             var there = alreadyThere(plan, todo);
             if (there.length && !confirm("These are already there and would be written over:\n\n" +
                     there.join("\n").replace(/\//g, "\\") + "\n\nCarry on?", true, PANEL_NAME)) {
@@ -1014,7 +1107,7 @@
                 }
                 if (missing.length) {
                     throw new Error("These output templates are missing, and the presets project " +
-                        "did not have them:\n  " + missing.join("\n  ") + "\n\n" + PRESETS_FILE);
+                        "did not have them:\n  " + missing.join("\n  "));
                 }
                 for (i = 0; i < made.length; i++) {
                     setUpItem(made[i].item, made[i].kind, made[i].out, sp);
@@ -1080,6 +1173,7 @@
             nameChanged(false);
         };
         scaleList.onChange = function () { nameChanged(false); };
+        mp4ScaleList.onChange = function () { nameChanged(false); };
         fpsOverride.onClick = function () {
             fpsText.enabled = fpsOverride.value;
             if (!fpsOverride.value && comp()) { fpsText.text = String(Math.round(comp().frameRate * 1000) / 1000); }
