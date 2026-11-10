@@ -31,6 +31,9 @@
                from the stop-motion TIFF sequence used in the comp
                (..._smAnim_gali01-main_v001.[####].tif -> gali01), else
                from the comp name. Version defaults to the next free one.
+               Any task lists every task folder in the shot, to publish
+               somewhere other than the After Effects tasks. Open Folder
+               shows the shot and task's media folder in File Explorer.
             4. Frames come from the comp's work area, frame rate from the
                comp (Override to change it).
             5. Add to Render Queue, or Add & Render.
@@ -247,6 +250,33 @@
                  task: tokens[tokens.length - 3] };
     }
 
+    function shotDir(ctx) {
+        return join(PROJECTS_ROOT, ctx.project, SHOT_DIR, ctx.ep, ctx.sq, ctx.sh);
+    }
+
+    function taskChoices(ctx, anyTask) {
+        /* The AE tasks, or with anyTask every task folder in the shot too. */
+        var out = AE_TASKS.slice(0);
+        if (!anyTask) { return out; }
+        var found = FS.listDirs(shotDir(ctx));
+        for (var i = 0; i < found.length; i++) {
+            if (!inList(out, found[i])) { out.push(found[i]); }
+        }
+        return out;
+    }
+
+    function folderToOpen(ctx) {
+        /* The media folder, or the closest folder above it that exists. */
+        var tries = [mediaDir(ctx), join(shotDir(ctx), ctx.task), shotDir(ctx),
+                     join(PROJECTS_ROOT, ctx.project, SHOT_DIR, ctx.ep, ctx.sq),
+                     join(PROJECTS_ROOT, ctx.project, SHOT_DIR, ctx.ep),
+                     join(PROJECTS_ROOT, ctx.project), PROJECTS_ROOT];
+        for (var i = 0; i < tries.length; i++) {
+            if (FS.exists(tries[i])) { return tries[i]; }
+        }
+        return null;
+    }
+
     function mediaDir(ctx) {
         return join(PROJECTS_ROOT, ctx.project, SHOT_DIR, ctx.ep, ctx.sq, ctx.sh, ctx.task,
                     MEDIA_PATH.join("/"));
@@ -318,6 +348,7 @@
         FS: FS, parseAepPath: parseAepPath, firstToken: firstToken, cleanLayer: cleanLayer,
         cleanVariant: cleanVariant, proxyVariant: proxyVariant, stemOf: stemOf,
         parseLayerName: parseLayerName, mediaDir: mediaDir, nextVersion: nextVersion,
+        shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
@@ -717,6 +748,11 @@
         label(r2, "Task");
         var taskList = r2.add("dropdownlist", undefined, AE_TASKS);
         taskList.preferredSize = [130, 26];
+        var anyTask = r2.add("checkbox", undefined, "Any task");
+        anyTask.helpTip = "Publish to any task folder in this shot, not just the After Effects ones.";
+        var bOpen = flatButton(r2, "Open Folder", 110);
+        bOpen.helpTip = "Open this shot and task's publish media folder in File Explorer\n" +
+            "(or the closest folder above it, if it is not made yet).";
         var taskNote = s2.add("statictext", undefined, "", { multiline: true });
         taskNote.preferredSize = [560, 32];
         styleText(taskNote, C_ACCENT, 11, false);
@@ -865,7 +901,8 @@
             if (newVersion && layer && x.ep && x.sq && x.sh) {
                 versionText.text = pad3(nextVersion(x, layer, variant));
             }
-            taskNote.text = TASK_NOTES[x.task] || "";
+            taskNote.text = TASK_NOTES[x.task] ||
+                (x.task ? "Publishing to " + x.task + ", which is not an After Effects task." : "");
             var err = checkInputs(x, layer, variant, versionText.text);
             if (err) {
                 namePreview.text = err;
@@ -891,7 +928,24 @@
             if (level <= 1) { fillLevel(epList, shotRoot, want.ep); }
             if (level <= 2) { fillLevel(sqList, join(shotRoot, ddValue(epList)), want.sq); }
             if (level <= 3) { fillLevel(shList, join(shotRoot, ddValue(epList), ddValue(sqList)), want.sh); }
+            fillTasks(want.task);
             nameChanged(true);
+        }
+
+        function fillTasks(want) {
+            var choices = taskChoices(ctx(), anyTask.value);
+            want = want || ddValue(taskList);
+            if (!inList(choices, want)) { want = DEFAULT_TASK; }
+            fillDropdown(taskList, choices, want);
+        }
+
+        function openFolder() {
+            var x = ctx();
+            var path = folderToOpen(x);
+            if (!path) { say("Could not find " + PROJECTS_ROOT + ". Is pCloud running as P:?", false); return; }
+            new Folder(path).execute();
+            say(path === mediaDir(x) ? "Opened the media folder." :
+                "No media folder yet, opened " + path.replace(/\//g, "\\"));
         }
 
         // ─────────── actions ───────────
@@ -1011,7 +1065,9 @@
         projectList.onChange = function () { fillShot(1); };
         epList.onChange = function () { fillShot(2); };
         sqList.onChange = function () { fillShot(3); };
-        shList.onChange = function () { nameChanged(true); };
+        shList.onChange = function () { fillTasks(); nameChanged(true); };
+        anyTask.onClick = function () { fillTasks(); nameChanged(true); };
+        bOpen.onClick = openFolder;
         taskList.onChange = function () { nameChanged(true); };
         layerText.onChange = function () { layerText.text = cleanLayer(layerText.text); nameChanged(true); };
         variantText.onChange = function () {
@@ -1035,8 +1091,9 @@
         // ─────────── first fill ───────────
 
         fillComps(activeComp());
+        // A file saved in a task that is not an After Effects one turns on Any task.
+        anyTask.value = !!(here.task && !inList(AE_TASKS, here.task));
         fillShot(0, here);
-        fillDropdown(taskList, AE_TASKS, inList(AE_TASKS, here.task) ? here.task : DEFAULT_TASK);
         compChanged();
         say(openProjectPath() ? "" : "Save the project first to fill in the shot by itself.");
 
