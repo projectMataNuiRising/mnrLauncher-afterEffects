@@ -473,16 +473,28 @@
     }
 
     function canUseCommandLine() {
-        try {
-            return app.preferences.getPrefAsLong("Main Pref Section",
-                "Pref_SCRIPTING_FILE_NETWORK_SECURITY") === 1;
-        } catch (e) { return true; }
+        /* "Allow Scripts to Write Files and Access Network". Newer After
+           Effects keep it in "Main Pref Section v2". MNR Launcher switches
+           it on before it starts After Effects. */
+        var sections = ["Main Pref Section v2", "Main Pref Section"];
+        var found = false;
+        for (var i = 0; i < sections.length; i++) {
+            try {
+                if (!app.preferences.havePref(sections[i], "Pref_SCRIPTING_FILE_NETWORK_SECURITY")) { continue; }
+                found = true;
+                if (app.preferences.getPrefAsLong(sections[i], "Pref_SCRIPTING_FILE_NETWORK_SECURITY") === 1) {
+                    return true;
+                }
+            } catch (e) {}
+        }
+        return !found;          // could not tell: let it try
     }
 
     function needCommandLine() {
         if (canUseCommandLine()) { return true; }
-        alert("This needs Preferences > Scripting & Expressions >\n" +
-              "\"Allow Scripts to Write Files and Access Network\" ticked.", PANEL_NAME);
+        alert("This needs Edit > Preferences > Scripting & Expressions >\n" +
+              "\"Allow Scripts to Write Files and Access Network\" ticked.\n\n" +
+              "Starting After Effects from MNR Launcher ticks it for you.", PANEL_NAME);
         return false;
     }
 

@@ -353,10 +353,21 @@
     }
 
     function canWriteFiles() {
-        try {
-            return app.preferences.getPrefAsLong("Main Pref Section",
-                "Pref_SCRIPTING_FILE_NETWORK_SECURITY") === 1;
-        } catch (e) { return true; }
+        /* "Allow Scripts to Write Files and Access Network". Newer After
+           Effects keep it in "Main Pref Section v2". MNR Launcher switches
+           it on before it starts After Effects. */
+        var sections = ["Main Pref Section v2", "Main Pref Section"];
+        var found = false;
+        for (var i = 0; i < sections.length; i++) {
+            try {
+                if (!app.preferences.havePref(sections[i], "Pref_SCRIPTING_FILE_NETWORK_SECURITY")) { continue; }
+                found = true;
+                if (app.preferences.getPrefAsLong(sections[i], "Pref_SCRIPTING_FILE_NETWORK_SECURITY") === 1) {
+                    return true;
+                }
+            } catch (e) {}
+        }
+        return !found;          // could not tell: let it try
     }
 
     function allComps() {
@@ -683,6 +694,7 @@
         compList.alignment = ["fill", "center"];
         compList.preferredSize = [420, 26];
         var bActive = flatButton(r1, "Use Active Comp", 130);
+        bActive.helpTip = "Pick the comp open in the viewer, and refresh the list of comps.";
         var compInfo = label(s1, "");
         compInfo.characters = 60;
         styleText(compInfo, C_DIM, 11, false);
@@ -907,9 +919,10 @@
             var sp = span(c, fps);
             if (!sp) { say("Start and End frames are not right.", false); return; }
             if (!canWriteFiles()) {
-                alert("Tick Preferences > Scripting & Expressions >\n" +
+                alert("Tick Edit > Preferences > Scripting & Expressions >\n" +
                       "\"Allow Scripts to Write Files and Access Network\"\n" +
-                      "so the export folders can be made.", PANEL_NAME);
+                      "so the export folders can be made.\n\n" +
+                      "Starting After Effects from MNR Launcher ticks it for you.", PANEL_NAME);
                 return;
             }
             var plan = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale());
@@ -1019,18 +1032,6 @@
         bRender.onClick = function () { doQueue(true); };
         bPresets.onClick = doPresets;
 
-        // New comps show up when the window is used again.
-        win.onActivate = function () {
-            if (st.busy) { return; }
-            try {
-                if (allComps().length !== st.comps.length) {
-                    var keep = comp();
-                    fillComps(keep);
-                    if (comp() !== keep) { compChanged(); }
-                }
-            } catch (e) {}
-        };
-
         // ─────────── first fill ───────────
 
         fillComps(activeComp());
@@ -1056,7 +1057,10 @@
     var built = buildUI(thisObj);
     if (built instanceof Window) {
         $.global.mnrAEExporterWindow = built;
-        built.onClose = function () { $.global.mnrAEExporterWindow = null; };
+        built.onClose = function () {
+            $.global.mnrAEExporterWindow = null;
+            return true;
+        };
         built.center();
         built.show();
     }
