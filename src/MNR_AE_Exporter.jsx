@@ -725,11 +725,31 @@
                 };
             }
         }
+        var waS = Math.round(comp.workAreaStart * fps);
+        var waN = Math.max(1, Math.round(comp.workAreaDuration * fps));
+        if (tif && !tif.ok) {
+            // Time remap / stretch / fps mismatch: still number from the
+            // TIFFs, with their first frame at the start of the work area
+            // (when the counts match) or where the sequence starts.
+            var got = tifFrames(FS.listNames(tif.folder), tif.name);
+            if (got.length) {
+                var gBase = got[0] - (got.length === waN ? waS : Math.round(tif.offset * fps));
+                var gStart = gBase + waS;
+                return {
+                    base: gBase, have: got, stem: tif.name, guessed: true,
+                    start: gStart, end: gStart + waN - 1,
+                    note: "the TIFFs, with comp frame " + (frameOffset(comp) + waS) + " as TIFF frame " + gStart +
+                        ", because " + tif.why + ". Override frames was ticked for you, check the numbers" +
+                        (got.length === waN ? "" : " (the TIFF folder has " + got.length +
+                         " frames, the work area " + waN + ")")
+                };
+            }
+        }
         var off = frameOffset(comp);
-        var start = off + Math.round(comp.workAreaStart * fps);
+        var start = off + waS;
         return {
             base: off, have: [], stem: "",
-            start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,
+            start: start, end: start + waN - 1,
             note: !tif ? "no smAnim TIFF in this comp, so the comp's own frame numbers and work area" :
                 (tif.ok ? "the TIFF folder could not be read, so the comp's own frame numbers and work area" :
                  "the comp's own frame numbers and work area, because " + tif.why +
@@ -968,6 +988,67 @@
         }
         om.file = new File(out.file);
         return item;
+    }
+
+    function setOM(item, obj, what) {
+        /* Sets output module settings; false (and logged) if After Effects
+           will not take them. */
+        try { item.outputModule(1).setSettings(obj); return true; } catch (e) {
+            log("  could not set " + what + ": " + e.toString());
+            return false;
+        }
+    }
+
+    function sameFrames(a, b, fps) { return Math.round(a * fps) === Math.round(b * fps); }
+
+    function canRenderDirect(kind, c, fps, sp) {
+        /* EXR and PNG render straight from the artist's comp when the export
+           is its work area at its own frame rate. */
+        return kind !== "mp4" && Math.abs(fps - c.frameRate) < 0.001 &&
+            sameFrames(sp.start, c.workAreaStart, fps) && sameFrames(sp.duration, c.workAreaDuration, fps);
+    }
+
+    function setUpDirect(item, kind, out, sp) {
+        /* Renders the comp's work area, numbered from sp.first with Starting #,
+           resized in the output module. Returns "" when set up, else why not. */
+        var c = item.comp;
+        try { item.applyTemplate(RENDER_TEMPLATE); } catch (e) {}
+        try { item.setSettings({ "Time Span": "Work Area" }); } catch (e2) { return "Time Span would not take Work Area"; }
+        if (!sameFrames(item.timeSpanDuration, sp.duration, sp.fps)) {
+            return "render length " + item.timeSpanDuration + "s, wanted " + sp.duration + "s";
+        }
+        var om = item.outputModule(1);
+        om.applyTemplate(templateFor(templateList(om), kind));
+        noResize(item.outputModule(1));
+        var size = outputSize(c.width, c.height, out.scale, false);
+        if (out.scale !== 1) {
+            setOM(item, { "Lock Aspect Ratio": false }, "Lock Aspect Ratio");
+            if (!setOM(item, { "Resize": true, "Resize to": { x: size[0], y: size[1] } }, "Resize")) {
+                return "Resize would not take";
+            }
+            setOM(item, { "Resize Quality": "High" }, "Resize Quality");
+        }
+        if (!setOM(item, { "Use Comp Frame Number": false }, "Use Comp Frame Number")) {
+            setOM(item, { "Use Comp Frame Number": "false" }, "Use Comp Frame Number");
+        }
+        if (!setOM(item, { "Starting #": sp.first }, "Starting #")) {
+            setOM(item, { "Starting #": String(sp.first) }, "Starting #");
+        }
+        // Read back: only use it if After Effects really took it.
+        var got;
+        try { got = item.outputModule(1).getSettings(GetSettingsFormat.STRING); } catch (e3) { return "could not read the settings back"; }
+        if (lower(got["Use Comp Frame Number"]) !== "false") { return "Use Comp Frame Number stayed on"; }
+        if (parseInt(got["Starting #"], 10) !== sp.first) { return "Starting # is " + got["Starting #"]; }
+        if (out.scale !== 1) {
+            var rt = got["Resize to"] || {};
+            if (parseInt(rt.x, 10) !== size[0] || parseInt(rt.y, 10) !== size[1]) {
+                return "Resize to is " + rt.x + " x " + rt.y;
+            }
+        }
+        item.outputModule(1).file = new File(out.file);
+        log("  " + kind + " direct from \"" + c.name + "\": work area, Starting # " + sp.first +
+            (out.scale !== 1 ? ", resized to " + size[0] + " x " + size[1] : ""));
+        return "";
     }
 
     // ─────────────────────────────────────────────
@@ -1312,7 +1393,16 @@
                 Math.round(c.duration * c.frameRate) + " frames" + (fpsWarn ? "      " + fpsWarn : "");
             styleText(compInfo, fpsWarn ? C_BAD : C_DIM, 11, !!fpsWarn);
             st.frames = frameInfo(c);
-            if (!framesOverride.value) {
+            if (st.frames.guessed) {
+                // Numbered by a guess, so the frames are shown as overridden.
+                framesOverride.value = true;
+                st.autoOverride = true;
+            } else if (st.autoOverride) {
+                framesOverride.value = false;
+                st.autoOverride = false;
+            }
+            startText.enabled = endText.enabled = framesOverride.value;
+            if (!framesOverride.value || st.frames.guessed) {
                 startText.text = String(st.frames.start);
                 endText.text = String(st.frames.end);
             }
@@ -1535,23 +1625,41 @@
 
                 // 2. A render comp and a render queue item per output.
                 step = "making the MNR Exports folder";
-                var folder = exportFolder();
+                var folder = null;     // only made when a render comp is needed
                 for (i = 0; i < todo.length; i++) {
                     var out = plan[todo[i]];
-                    step = "making the " + todo[i] + " render comp";
-                    var rc = renderComp(folder, c, out, fps, sp);
-                    made.push({ kind: todo[i], comp: rc, out: out });
-                    step = "adding the " + todo[i] + " render to the queue";
-                    var item = app.project.renderQueue.items.add(rc);
-                    step = "setting up the " + todo[i] + " render";
-                    setUpItem(item, todo[i], out, sp);
+                    var item = null;
+                    if (canRenderDirect(todo[i], c, fps, sp)) {
+                        // EXR / PNG: straight from the comp, no render comp.
+                        step = "adding the " + todo[i] + " render to the queue";
+                        item = app.project.renderQueue.items.add(c);
+                        made.push({ kind: todo[i], item: item, out: out });
+                        step = "setting up the " + todo[i] + " render";
+                        var why = setUpDirect(item, todo[i], out, sp);
+                        if (why) {
+                            log("  " + todo[i] + ": using a render comp, because " + why);
+                            made.pop();
+                            item.remove();
+                            item = null;
+                        }
+                    }
+                    if (!item) {
+                        step = "making the " + todo[i] + " render comp";
+                        folder = folder || exportFolder();
+                        var rc = renderComp(folder, c, out, fps, sp);
+                        made.push({ kind: todo[i], comp: rc, out: out });
+                        step = "adding the " + todo[i] + " render to the queue";
+                        item = app.project.renderQueue.items.add(rc);
+                        step = "setting up the " + todo[i] + " render";
+                        setUpItem(item, todo[i], out, sp);
+                    }
                     log("queued " + todo[i] + " -> " + out.file);
                 }
             } catch (e) {
                 var where = "Failed while " + step + (e.line ? " (line " + e.line + ")" : "");
                 log("ERROR " + where + ": " + e.toString());
                 for (i = 0; i < made.length; i++) {
-                    try { made[i].comp.remove(); } catch (e2) {}
+                    try { if (made[i].comp) { made[i].comp.remove(); } else { made[i].item.remove(); } } catch (e2) {}
                 }
                 app.endUndoGroup();
                 st.busy = false;
@@ -1602,6 +1710,7 @@
             framesChanged();
         };
         framesOverride.onClick = function () {
+            st.autoOverride = false;
             startText.enabled = endText.enabled = framesOverride.value;
             if (!framesOverride.value && st.frames) {
                 startText.text = String(st.frames.start);

@@ -118,11 +118,18 @@ to Render Queue or Add & Render. Into `<task>\export\publish\media\`:
   (`-proxy` in place of the variant)
 
 where `<name>` is e.g. `BFP102_SQ04_SH08_rotoKeyPrimary_gali01-main_v001`.
-The size of each output is shown in the panel. Frames come from the
-comp's work area and the frame rate from the comp (with an override).
-Each output renders from its own comp in the `MNR Exports` project
-folder, made at the output size, so the artist's comp is never changed
-and the templates' own Resize and Crop are switched off.
+The size of each output is shown in the panel. Frames are numbered like
+the source TIFFs (1001...) over the comp's work area, and the frame rate
+comes from the comp (with an override). When the TIFF's timing can't be
+followed (time remap, stretch, another frame rate), the TIFF folder's
+first frame is put at the start of the work area, Override frames is
+ticked and a note says so.
+
+EXR and PNG render straight from the artist's comp (Work Area, Starting
+# set to the first frame, PNG resized in the output module). The MP4,
+and EXR / PNG when the range isn't the work area or the frame rate is
+overridden, render from their own comp in the `MNR Exports` project
+folder. The artist's comp is never changed.
 
 Scripts cannot choose an output format, so the formats come from Output
 Module templates. For each output either name works:
