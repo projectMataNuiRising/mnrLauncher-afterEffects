@@ -893,9 +893,18 @@
         // 12 fps = 83.4 s), not from 0.
         var compStart = 0;
         try { compStart = item.comp.displayStartTime || 0; } catch (e2) {}
-        item.timeSpanDuration = span.duration;
-        item.timeSpanStart = compStart + span.start;
-        item.timeSpanDuration = span.duration;
+        // Start and length are set one at a time, and After Effects warns
+        // about the half-set range in between, so its dialogs are off here.
+        try { app.beginSuppressDialogs(); } catch (e3) {}
+        try {
+            item.timeSpanStart = compStart + span.start;
+            item.timeSpanDuration = span.duration;
+            item.timeSpanStart = compStart + span.start;
+        } finally {
+            try { app.endSuppressDialogs(false); } catch (e4) {}
+        }
+        log("  " + kind + " range " + item.timeSpanStart + " + " + item.timeSpanDuration +
+            "s (comp " + compStart + " + " + item.comp.duration + "s)");
         var om = item.outputModule(1);
         om.applyTemplate(templateFor(templateList(om), kind));
         om = item.outputModule(1);     // re-fetch, changing an output module can invalidate it
