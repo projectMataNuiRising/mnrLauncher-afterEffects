@@ -85,6 +85,10 @@
     var EXT = ".aep";
     var DEFAULT_VARIANT = "main";
     var AE_TASKS = ["rotoKeyPrimary", "rotoKeyUtility", "comp"];
+    // The pipeline users: one folder each (same list as MNR Launcher's user picker).
+    var USERS_DIR = "P:/00-temp";
+    // Where the panel remembers what it was showing, per project.
+    var SETTINGS_SECTION = "MNR Scene Manager";
     var WINDOW_FRACTION = [0.62, 0.52];
 
     var C_ACCENT = [0.29, 0.56, 0.89, 1];
@@ -245,9 +249,11 @@
             pad3(version) + EXT;
     }
 
-    function nextVersion(rows, variant) {
+    function nextVersion(rows, variant, user) {
+        /* One past the highest version of variant (in user's folder, when given). */
         var best = 0;
         for (var i = 0; i < rows.length; i++) {
+            if (user && lower(rows[i].user) !== lower(user)) { continue; }
             if (rows[i].variant && lower(rows[i].variant) === lower(variant)) {
                 for (var j = 0; j < rows[i].versions.length; j++) {
                     if (rows[i].versions[j].num > best) { best = rows[i].versions[j].num; }
@@ -381,6 +387,40 @@
         return ctx;
     }
 
+    function userChoices(taskPath, me) {
+        /* {have: user folders already in this task's work folder,
+            more: other pipeline users (P:\00-temp), the current user
+            first in whichever list they are in}. */
+        var have = [], more = [], i;
+        var existing = FS.listDirs(join(taskPath, "work"));
+        for (i = 0; i < existing.length; i++) {
+            if (!startsWith(existing[i], "#") && !startsWith(existing[i], ".")) { have.push(existing[i]); }
+        }
+        var all = FS.listDirs(USERS_DIR);
+        for (i = 0; i < all.length; i++) {
+            if (!inListI(have, all[i])) { more.push(all[i]); }
+        }
+        function meFirst(list) {
+            for (var j = 0; j < list.length; j++) {
+                if (lower(list[j]) === lower(me)) { list.unshift(list.splice(j, 1)[0]); return true; }
+            }
+            return false;
+        }
+        if (!meFirst(have) && !meFirst(more)) { more.unshift(me); }
+        return { have: have, more: more };
+    }
+
+    function viewText(tab, chain, task) {
+        /* What the panel was showing, as one line: SHOT|102/SQ04/SH12|rotoKeyPrimary */
+        return tab + "|" + chain.join("/") + "|" + (task || "");
+    }
+
+    function parseView(text) {
+        var p = String(text || "").split("|");
+        if (p.length < 3 || (p[0] !== "SHOT" && p[0] !== "ASSET") || !p[1]) { return null; }
+        return { tab: p[0], chain: p[1].split("/"), task: p[2] || null };
+    }
+
     function tabRoot(st) {
         return join(PROJECTS_ROOT, st.project, st.tab === "SHOT" ? SHOT_DIR : ASSET_DIR);
     }
@@ -455,6 +495,8 @@
         saveFolder: saveFolder, makeUserFolders: makeUserFolders, listTasks: listTasks,
         taskHasFiles: taskHasFiles, scanFiles: scanFiles, namingContext: namingContext,
         renamePlan: renamePlan, parseOpenFile: parseOpenFile, projectOfPath: projectOfPath,
+        userChoices: userChoices, viewText: viewText, parseView: parseView,
+        setUsersDir: function (d) { USERS_DIR = d; },
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
     if (typeof module !== "undefined" && module.exports) {
@@ -470,6 +512,17 @@
         try {
             return app.project && app.project.file ? app.project.file.fsName.replace(/\\/g, "/") : "";
         } catch (e) { return ""; }
+    }
+
+    function getSetting(key) {
+        try {
+            return app.settings.haveSetting(SETTINGS_SECTION, key) ?
+                app.settings.getSetting(SETTINGS_SECTION, key) : "";
+        } catch (e) { return ""; }
+    }
+
+    function saveSetting(key, value) {
+        try { app.settings.saveSetting(SETTINGS_SECTION, key, value); } catch (e) {}
     }
 
     function canUseCommandLine() {
@@ -592,7 +645,9 @@
 
     function buildUI(thisObj) {
         var st = {
-            project: projectOfPath(openProjectPath()) || DEFAULT_PROJECT,
+            project: projectOfPath(openProjectPath()) ||
+                (FS.isDir(join(PROJECTS_ROOT, getSetting("lastProject"))) && getSetting("lastProject")) ||
+                DEFAULT_PROJECT,
             tab: "SHOT", selNode: { SHOT: null, ASSET: null }, selTask: null,
             showAll: false, rows: [], tasks: [], search: ""
         };
@@ -876,12 +931,13 @@
             versionList.selection = row.sel;
         }
 
-        function selectOpenFile() {
-            var where = parseOpenFile(openProjectPath(), st.project);
-            if (!where) { return; }
+        function selectPlace(where, keepPath) {
+            /* Shows a tab / shot or asset / task: {tab, chain, task}. */
+            if (!where) { return false; }
             st.tab = where.tab;
             setActive(shotTab, st.tab === "SHOT");
             setActive(assetTab, st.tab === "ASSET");
+            st.search = ""; search.text = "";
             fillTree();
             var items = tree.items;
             var node = null;
@@ -890,23 +946,43 @@
                 for (var i = 0; i < items.length; i++) {
                     if (items[i].text === where.chain[c]) { node = items[i]; break; }
                 }
-                if (!node) { return; }
+                if (!node) { return false; }
                 if (!node.mnrLeaf) {
                     loadChildren(node);
                     node.expanded = true;
                     items = node.items;
                 }
             }
+            if (!node || !node.mnrLeaf) { return false; }
             tree.selection = node;
             st.selNode[st.tab] = node.mnrPath;
             st.selTask = where.task;
             fillTasks(true);
-            if (!st.selTask) {
+            if (where.task && !st.selTask) {
                 st.showAll = true; showAll.value = true;
                 st.selTask = where.task;
                 fillTasks(true);
             }
-            fillFiles(openProjectPath());
+            fillFiles(keepPath);
+            return true;
+        }
+
+        function rememberView() {
+            /* Saved on every change, so the panel opens where it was left. */
+            var leaf = st.selNode[st.tab];
+            saveSetting("lastProject", st.project);
+            if (!leaf) { return; }
+            var root = tabRoot(st);
+            if (!startsWith(lower(leaf), lower(root + "/"))) { return; }
+            saveSetting("view_" + st.project, viewText(st.tab, leaf.substr(root.length + 1).split("/"), st.selTask));
+        }
+
+        function selectStart() {
+            /* The open project's shot and task, else where the panel was left
+               last time for this project. */
+            var open = openProjectPath();
+            if (selectPlace(parseOpenFile(open, st.project), open)) { rememberView(); return; }
+            selectPlace(parseView(getSetting("view_" + st.project)), null);
         }
 
         function setProject(name) {
@@ -918,6 +994,8 @@
             search.text = "";
             fillTree();
             fillTasks(false);
+            selectPlace(parseView(getSetting("view_" + name)), null);
+            rememberView();
         }
 
         // ─────────── events ───────────
@@ -932,13 +1010,13 @@
             if (st.tab === "SHOT") { return; }
             st.tab = "SHOT"; setActive(shotTab, true); setActive(assetTab, false);
             st.search = ""; search.text = "";
-            fillTree(); fillTasks(true);
+            fillTree(); fillTasks(true); rememberView();
         };
         assetTab.onClick = function () {
             if (st.tab === "ASSET") { return; }
             st.tab = "ASSET"; setActive(assetTab, true); setActive(shotTab, false);
             st.search = ""; search.text = "";
-            fillTree(); fillTasks(true);
+            fillTree(); fillTasks(true); rememberView();
         };
 
         search.onChange = function () {
@@ -959,6 +1037,7 @@
             if (st.selNode[st.tab] !== item.mnrPath) {
                 st.selNode[st.tab] = item.mnrPath;
                 fillTasks(true);
+                rememberView();
             }
         };
 
@@ -967,7 +1046,7 @@
         taskList.onChange = function () {
             if (!taskList.selection) { return; }
             var name = st.tasks[taskList.selection.index];
-            if (name !== st.selTask) { st.selTask = name; fillFiles(); }
+            if (name !== st.selTask) { st.selTask = name; fillFiles(); rememberView(); }
         };
 
         fileList.onChange = function () { fillVersions(); updateButtons(); };
@@ -1046,6 +1125,30 @@
             heading(d, "Name");
             var field = d.add("edittext", undefined, initial);
             field.characters = 50;
+            heading(d, "User");
+            var users = userChoices(ctx.taskPath, me);
+            var userList = d.add("dropdownlist", undefined, []);
+            userList.preferredSize.width = 300;
+            userList.helpTip = "Whose work folder it is saved in. Folders already in this task are " +
+                "at the top; under them, the other pipeline users.";
+            var userNames = [];
+            var pickUser = 0, u;
+            for (u = 0; u < users.have.length; u++) {
+                userList.add("item", users.have[u]);
+                userNames.push(users.have[u]);
+                if (lower(users.have[u]) === lower(me)) { pickUser = userNames.length - 1; }
+            }
+            if (users.have.length && users.more.length) { userList.add("separator"); userNames.push(null); }
+            for (u = 0; u < users.more.length; u++) {
+                userList.add("item", "Add new:  " + users.more[u]);
+                userNames.push(users.more[u]);
+                if (lower(users.more[u]) === lower(me)) { pickUser = userNames.length - 1; }
+            }
+            userList.selection = pickUser;
+            function chosenUser() {
+                var sel = userList.selection;
+                return (sel && userNames[sel.index]) || me;
+            }
             var fileText = d.add("statictext", undefined, "", { truncate: "middle" });
             styleText(fileText, C_WHITE, 13, true);
             var verText = d.add("statictext", undefined, "");
@@ -1062,19 +1165,26 @@
 
             function target() {
                 var variant = cleanVariant(field.text) || DEFAULT_VARIANT;
-                var version = nextVersion(st.rows, variant);
-                return { variant: variant, version: version,
-                         path: join(saveFolder(ctx, me), buildName(ctx, variant, version)) };
+                var user = chosenUser();
+                var version = nextVersion(st.rows, variant, user);
+                return { variant: variant, version: version, user: user,
+                         path: join(saveFolder(ctx, user), buildName(ctx, variant, version)) };
             }
             function refresh() {
                 var t2 = target();
                 fileText.text = basename(t2.path);
                 verText.text = "Version v" + pad3(t2.version) + "  -  next free for '" +
-                    t2.variant + "' in this task";
+                    t2.variant + "' in " + t2.user + "'s folder";
                 folderText.text = new Folder(dirname(t2.path)).fsName;
                 errText.text = "";
             }
             field.onChanging = refresh;
+            userList.onChange = function () {
+                if (userList.selection && !userNames[userList.selection.index]) {
+                    userList.selection = pickUser;          // the separator line
+                }
+                refresh();
+            };
             refresh();
             cancel.onClick = function () { d.close(0); };
             ok.onClick = function () {
@@ -1096,7 +1206,7 @@
             var t = nameDialog("NEW", DEFAULT_VARIANT);
             if (!t) { return; }
             var ctx = namingContext(st);
-            try { makeUserFolders(ctx, me); } catch (e) { say("Could not make the folders: " + e, false); return; }
+            try { makeUserFolders(ctx, t.user); } catch (e) { say("Could not make the folders: " + e, false); return; }
             // After Effects asks to save the current project first, if it changed.
             var proj = app.newProject();
             if (!proj) { say("New cancelled.", false); return; }
@@ -1116,7 +1226,7 @@
             var t = nameDialog("SAVE_AS", parsed ? parsed.variant : DEFAULT_VARIANT);
             if (!t) { return; }
             var ctx = namingContext(st);
-            try { makeUserFolders(ctx, me); } catch (e) { say("Could not make the folders: " + e, false); return; }
+            try { makeUserFolders(ctx, t.user); } catch (e) { say("Could not make the folders: " + e, false); return; }
             app.project.save(new File(t.path));
             say("Saved " + basename(t.path), true);
             fillFiles(t.path);
@@ -1229,7 +1339,7 @@
         fillProjects();
         fillTree();
         fillTasks(false);
-        selectOpenFile();
+        selectStart();
 
         win.layout.layout(true);
         win.layout.resize();
