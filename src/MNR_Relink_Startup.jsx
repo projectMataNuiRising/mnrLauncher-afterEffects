@@ -16,6 +16,12 @@
       - EXRs moved into an exr folder:   <name>\<name>.####.exr -> <name>\exr\
       - proxies renamed:  <name>_Proxy\...-main_v001.####.png
                        -> <name with -proxy>\png\...-proxy_v001.####.png
+      - sequences that started at 0000 / 0001 renumbered (e.g. to 1001)
+
+    For a sequence, the frames in its new place are counted. The same
+    number of frames as the footage had, starting at another number, is
+    taken as a renumber and shown as one (0001-0081 -> 1001-1081). A
+    different number of frames is shown as a warning and left unticked.
 
     So older After Effects projects show that footage as missing. Whenever
     a project is opened (checked every few seconds), every missing file
@@ -114,13 +120,25 @@
         return out;
     }
 
+    function frameOf(file) {
+        /* name.1001.tif -> 1001, or -1 */
+        var m = String(file).match(/[._](\d+)\.[^.]+$/);
+        return m ? parseInt(m[1], 10) : -1;
+    }
+
+    function pad4(n) {
+        var s = String(n);
+        while (s.length < 4) { s = "0" + s; }
+        return s;
+    }
+
     function stemOf(file) {
         /* name.1001.tif / name_1001.tif -> name */
         return String(file).replace(/\.[^.]+$/, "").replace(/[._]\d+$/, "");
     }
 
     var CORE = { newPlaces: newPlaces, fixFolderName: fixFolderName, fixFileName: fixFileName,
-                 stemOf: stemOf };
+                 stemOf: stemOf, frameOf: frameOf };
     if (typeof module !== "undefined" && module.exports) {
         module.exports = CORE;
         return;
@@ -157,21 +175,29 @@
     }
 
     function existingFile(path, sequence) {
-        /* The file, or for a sequence any frame of the same name in that folder. */
+        /* {file, first, last, count} for the file, or for a sequence its
+           frames of the same name in that folder (any numbers: a renumbered
+           sequence has the same name with other frame numbers). null when
+           not there. */
         var f = new File(path);
-        if (f.exists) { return f; }
-        if (!sequence) { return null; }
+        if (!sequence) { return f.exists ? { file: f, first: -1, last: -1, count: 1 } : null; }
         var dir = new Folder(path.replace(/\/[^\/]*$/, ""));
         if (!dir.exists) { return null; }
         var want = lower(stemOf(path.replace(/^.*\//, "")));
         var files = dir.getFiles();
-        var best = null;
+        var best = null, first = -1, last = -1, count = 0;
         for (var i = 0; i < files.length; i++) {
             if (!(files[i] instanceof File)) { continue; }
             var n = File.decode(files[i].name);
-            if (lower(stemOf(n)) === want && (!best || n < File.decode(best.name))) { best = files[i]; }
+            if (lower(stemOf(n)) !== want) { continue; }
+            var fr = frameOf(n);
+            if (fr < 0) { continue; }
+            count++;
+            if (first < 0 || fr < first) { first = fr; best = files[i]; }
+            if (fr > last) { last = fr; }
         }
-        return best;
+        if (f.exists && frameOf(path.replace(/^.*\//, "")) === first) { best = f; }
+        return best ? { file: best, first: first, last: last, count: count } : null;
     }
 
     function findMoved() {
@@ -187,12 +213,28 @@
                 if (lower(was).substr(0, root.length) !== root) { continue; }
                 var sequence = !item.mainSource.isStill && IMAGE_EXT.test(was);
                 var places = newPlaces(was);
+                // Frames the footage had: its length at its frame rate.
+                var expected = sequence ? Math.round(item.duration * item.frameRate) : 1;
+                var oldFirst = frameOf(was.replace(/^.*\//, ""));
                 for (var j = 0; j < places.length; j++) {
                     var f = existingFile(places[j], sequence);
-                    if (f) {
-                        out.push({ item: item, was: was, now: f.fsName.replace(/\\/g, "/"), sequence: sequence });
-                        break;
+                    if (!f) { continue; }
+                    var hit = { item: item, was: was, now: f.file.fsName.replace(/\\/g, "/"),
+                                sequence: sequence, note: "", ok: true };
+                    if (sequence) {
+                        if (f.count !== expected) {
+                            hit.note = "frame count differs: " + f.count + " there, " + expected +
+                                " expected (" + pad4(f.first) + "-" + pad4(f.last) + ")";
+                            hit.ok = false;
+                        } else if (oldFirst >= 0 && f.first !== oldFirst) {
+                            hit.note = "renumbered " + pad4(oldFirst) + "-" + pad4(oldFirst + expected - 1) +
+                                " -> " + pad4(f.first) + "-" + pad4(f.last);
+                        } else {
+                            hit.note = f.count + " frames, " + pad4(f.first) + "-" + pad4(f.last);
+                        }
                     }
+                    out.push(hit);
+                    break;
                 }
             } catch (e) {}
         }
@@ -257,12 +299,20 @@
             g.margins = [10, 8, 10, 6];
             g.spacing = 2;
             var tick = g.add("checkbox", undefined, hits[i].item.name);
-            tick.value = true;
+            tick.value = hits[i].ok;
             ticks.push(tick);
             g.add("statictext", undefined, "was:  " + shortPath(hits[i].was), { truncate: "middle" })
                 .preferredSize.width = 700;
             g.add("statictext", undefined, "now:  " + shortPath(hits[i].now), { truncate: "middle" })
                 .preferredSize.width = 700;
+            if (hits[i].note) {
+                var note = g.add("statictext", undefined, (hits[i].ok ? "" : "CHECK: ") + hits[i].note);
+                note.preferredSize.width = 700;
+                try {
+                    note.graphics.foregroundColor = note.graphics.newPen(note.graphics.PenType.SOLID_COLOR,
+                        hits[i].ok ? [0.4, 0.8, 0.5, 1] : [0.95, 0.4, 0.35, 1], 1);
+                } catch (e2) {}
+            }
         }
         if (hits.length > shown) {
             var more = list.add("checkbox", undefined, "... and " + (hits.length - shown) + " more like these");
@@ -315,7 +365,8 @@
                 try {
                     replaceFootage(picked[i]);
                     done++;
-                    log("  " + picked[i].was + "  ->  " + picked[i].now);
+                    log("  " + picked[i].was + "  ->  " + picked[i].now +
+                        (picked[i].note ? "  (" + picked[i].note + ")" : ""));
                 } catch (e) {
                     failed.push(picked[i].item.name + ": " + e.toString());
                     log("  FAILED " + picked[i].was + ": " + e.toString());
