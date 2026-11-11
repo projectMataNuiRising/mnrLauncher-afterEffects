@@ -118,10 +118,14 @@ Module templates. For each output either name works:
 `MNR EXR ACEScg` / `BFP_exportSetting_openEXR_outputModule_v001`,
 `MNR MP4 Preview` / `BFP_exportSetting_mp4Preview_outputModule_v001`,
 `MNR PNG Proxy` / `BFP_exportSetting_proxyPng_outputModule_v001`.
-When none is there, the MNR ones are made from `src/MNR_Export_Presets.aep`
-(installed next to the panel by MNR Launcher, or
-`P:\02-pipeline\apps\afterEffects\presets\`): a project with one
-Render Queue item per output (OpenEXR Sequence, H.264, PNG Sequence),
+When none is there, the MNR ones are made from the presets project for
+the running After Effects version, `src/MNR_Export_Presets_<year>_v###.aep`
+(2024, 2025, 2026; After Effects cannot read a newer version's project,
+so it uses that year, else the newest older one, highest `v###`). They
+are installed next to the panel by MNR Launcher (the launcher installs
+every file `build/plugin.json` lists), with
+`P:\02-pipeline\apps\afterEffects\presets\` as a fallback. Each holds
+one Render Queue item per output (OpenEXR Sequence, H.264, PNG Sequence),
 told apart by format. When it changes, the next Add to Render Queue picks it up by itself.
 
 ## Installing

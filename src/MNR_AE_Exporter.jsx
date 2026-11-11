@@ -73,9 +73,13 @@
               MNR MP4 Preview   or BFP_exportSetting_mp4Preview_outputModule_v001
               MNR PNG Proxy     or BFP_exportSetting_proxyPng_outputModule_v001
             When none is there, the MNR ones are made from the presets
-            project, MNR_Export_Presets.aep, looked for next to this script
-            (MNR Launcher installs it with the plugin) and then in
-              P:\02-pipeline\apps\afterEffects\presets\
+            project for this After Effects version:
+              MNR_Export_Presets_<year>_v###.aep     (2024, 2025, 2026 ...)
+            After Effects cannot read a project from a newer version, so
+            the one for the running version is used (AE 26 -> 2026), else
+            the newest older one, highest v### first. Looked for next to
+            this script (MNR Launcher installs them with the plugin) and
+            then in P:\02-pipeline\apps\afterEffects\presets\
             which holds one Render Queue item per output, set up by hand:
               OpenEXR Sequence  RGB + Alpha, Floating Point+, Zip,
                                 Use Comp Frame Number, Output Color Space
@@ -110,15 +114,15 @@
     var AE_TASKS = ["rotoKeyPrimary", "rotoKeyUtility", "comp"];
     var DEFAULT_TASK = "rotoKeyPrimary";
     var DEFAULT_VARIANT = "main";
-    var PRESETS_FILE = "P:/02-pipeline/apps/afterEffects/presets/MNR_Export_Presets.aep";
+    var PRESETS_DIR = "P:/02-pipeline/apps/afterEffects/presets";
     var EXPORT_FOLDER = "MNR Exports";
     var RENDER_TEMPLATE = "Best Settings";
     var CHECKER_SIZE = 64;
     var CHECKER_LIGHT = 0.6;
     var CHECKER_DARK = 0.4;
-    var PRESETS_NAME = "MNR_Export_Presets.aep";
+    var PRESETS_PATTERN = /^MNR_Export_Presets_(\d{4})_v(\d+)\.aep$/i;
     var SCRIPT_DIR = (function () {
-        try { return File($.fileName).parent.fsName.replace(/\\/g, "/"); } catch (e) { return ""; }
+        try { return new File($.fileName).parent.fsName.replace(/\\/g, "/"); } catch (e) { return ""; }
     }());
     var MP4_SCALES = [2, 4];
     var PROXY_SCALES = [4, 8];
@@ -426,11 +430,33 @@
         return "";
     }
 
-    function presetsFiles() {
+    function presetsDirs() {
         var out = [];
-        if (SCRIPT_DIR) { out.push(join(SCRIPT_DIR, PRESETS_NAME)); }
-        out.push(PRESETS_FILE);
+        if (SCRIPT_DIR) { out.push(SCRIPT_DIR); }
+        out.push(PRESETS_DIR);
         return out;
+    }
+
+    function pickPresets(names, aeMajor) {
+        /* The presets project for After Effects <aeMajor> (26 -> 2026) from
+           a folder's file names: that year, else the newest older year
+           (newer ones cannot be read), highest v### first. Or "". */
+        var want = 2000 + aeMajor;
+        var best = "", bestYear = -1, bestVer = -1;
+        for (var i = 0; i < names.length; i++) {
+            var m = String(names[i]).match(PRESETS_PATTERN);
+            if (!m) { continue; }
+            var year = parseInt(m[1], 10), ver = parseInt(m[2], 10);
+            if (year > want) { continue; }
+            if (year > bestYear || (year === bestYear && ver > bestVer)) {
+                best = names[i]; bestYear = year; bestVer = ver;
+            }
+        }
+        return best;
+    }
+
+    function aeMajor() {
+        try { return parseInt(String(app.version), 10); } catch (e) { return 99; }
     }
 
     var CORE = {
@@ -439,7 +465,7 @@
         parseLayerName: parseLayerName, mediaDir: mediaDir, nextVersion: nextVersion,
         shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
-        outputSize: outputSize, templateFor: templateFor, presetsFiles: presetsFiles,
+        outputSize: outputSize, templateFor: templateFor, pickPresets: pickPresets,
         tifFrames: tifFrames, frameRanges: frameRanges, checkFrames: checkFrames,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
@@ -691,9 +717,12 @@
     }
 
     function findPresetsFile() {
-        var spots = presetsFiles();
-        for (var s = 0; s < spots.length; s++) {
-            if (new File(spots[s]).exists) { return new File(spots[s]); }
+        /* The presets project for this After Effects version, next to the
+           script first, then on P:. */
+        var dirs = presetsDirs();
+        for (var d = 0; d < dirs.length; d++) {
+            var name = pickPresets(FS.listNames(dirs[d]), aeMajor());
+            if (name) { return new File(join(dirs[d], name)); }
         }
         return null;
     }
@@ -1290,8 +1319,9 @@
                 if (missing.length) {
                     throw new Error("These output templates are missing:\n  " + missing.join("\n  ") +
                         "\n\n" + (pf ? "The presets project does not have them:\n" + pf.fsName :
-                        "No presets project found. Looked for:\n" +
-                        presetsFiles().join("\n").replace(/\//g, "\\") +
+                        "No presets project for After Effects " + (2000 + aeMajor()) +
+                        " or older (MNR_Export_Presets_<year>_v###.aep) in:\n" +
+                        presetsDirs().join("\n").replace(/\//g, "\\") +
                         "\n\nReinstall the AE plugin from MNR Launcher."));
                 }
                 for (i = 0; i < made.length; i++) {

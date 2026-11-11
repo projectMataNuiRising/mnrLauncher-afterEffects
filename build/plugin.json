@@ -19,13 +19,21 @@
       "install_as": "MNR_AE_Exporter.jsx"
     },
     {
-      "source": "src/MNR_Export_Presets.aep",
-      "install_as": "MNR_Export_Presets.aep",
-      "optional": true
+      "source": "src/MNR_Export_Presets_2024_v001.aep",
+      "install_as": "MNR_Export_Presets_2024_v001.aep"
+    },
+    {
+      "source": "src/MNR_Export_Presets_2025_v001.aep",
+      "install_as": "MNR_Export_Presets_2025_v001.aep"
+    },
+    {
+      "source": "src/MNR_Export_Presets_2026_v001.aep",
+      "install_as": "MNR_Export_Presets_2026_v001.aep"
     },
     {
       "source": "src/MNR_Feature_Catalog.jsx",
-      "install_as": "MNR_Feature_Catalog.jsx"
+      "install_as": "MNR_Feature_Catalog.jsx",
+      "install": false
     },
     {
       "source": "src/MNR_Scene_Manager_Startup.jsx",
