@@ -766,20 +766,29 @@
         top.locked = true;
     }
 
-    function renderComp(folder, src, out, fps, base) {
-        /* The comp an output renders from: src nested, scaled, maybe on the checker. */
+    function renderComp(folder, src, out, fps, sp) {
+        /* The comp an output renders from: exactly the export range long,
+           starting at the export's first frame number, with src nested
+           (scaled, maybe on the checker) so its frame at sp.start is the
+           first frame. Rendering the whole of it needs no render range, so
+           nothing depends on how After Effects counts times. */
         removeCompNamed(folder, out.comp);
         var size = outputSize(src.width, src.height, out.scale, out.checker);
         var w = size[0], h = size[1];
-        var c = app.project.items.addComp(out.comp, w, h, src.pixelAspect, src.duration, fps);
+        var c = app.project.items.addComp(out.comp, w, h, src.pixelAspect, sp.duration, fps);
         c.parentFolder = folder;
-        // Comp frame numbers = the TIFF's (or the comp's) frame numbers, so
-        // the templates' Use Comp Frame Number writes them.
-        try { c.displayStartTime = base / src.frameRate; } catch (e) {}
+        // Comp frame numbers = the export's frame numbers (1001...), so the
+        // templates' Use Comp Frame Number writes them.
+        try { c.displayStartTime = sp.first / fps; } catch (e) {}
         c.bgColor = [0, 0, 0];
         if (out.checker) { addChecker(c, CHECKER_SIZE / out.scale); }
-        // Added layers start at the comp's start (whatever its start frame).
+        // New layers are put at the comp's start, however After Effects
+        // counts it; moving it back by sp.start from there lines it up.
         var layer = c.layers.add(src);
+        var placed = layer.startTime;
+        layer.startTime = placed - sp.start;
+        log("  " + out.comp + ": comp " + c.displayStartTime + " + " + c.duration + "s, layer " +
+            placed + " -> " + layer.startTime);
         if (out.scale !== 1) {
             layer.property("ADBE Transform Group").property("ADBE Scale").setValue([100 / out.scale, 100 / out.scale]);
             layer.property("ADBE Transform Group").property("ADBE Position").setValue([w / 2, h / 2]);
@@ -889,22 +898,10 @@
 
     function setUpItem(item, kind, out, span) {
         try { item.applyTemplate(RENDER_TEMPLATE); } catch (e) {}
-        // The render queue counts from the comp's start frame (e.g. 1001 at
-        // 12 fps = 83.4 s), not from 0.
-        var compStart = 0;
-        try { compStart = item.comp.displayStartTime || 0; } catch (e2) {}
-        // Start and length are set one at a time, and After Effects warns
-        // about the half-set range in between, so its dialogs are off here.
-        try { app.beginSuppressDialogs(); } catch (e3) {}
-        try {
-            item.timeSpanStart = compStart + span.start;
-            item.timeSpanDuration = span.duration;
-            item.timeSpanStart = compStart + span.start;
-        } finally {
-            try { app.endSuppressDialogs(false); } catch (e4) {}
-        }
-        log("  " + kind + " range " + item.timeSpanStart + " + " + item.timeSpanDuration +
-            "s (comp " + compStart + " + " + item.comp.duration + "s)");
+        // The render comp is exactly the export, so it renders all of it.
+        try { item.setSettings({ "Time Span": "Length of Comp" }); } catch (e2) {}
+        log("  " + kind + " render " + item.timeSpanStart + " + " + item.timeSpanDuration +
+            "s, comp " + item.comp.displayStartTime + " + " + item.comp.duration + "s");
         var om = item.outputModule(1);
         om.applyTemplate(templateFor(templateList(om), kind));
         om = item.outputModule(1);     // re-fetch, changing an output module can invalidate it
@@ -1392,7 +1389,7 @@
             var a = parseInt(startText.text, 10), b = parseInt(endText.text, 10);
             if (isNaN(a) || isNaN(b) || b < a) { return null; }
             return { start: (a - st.frames.base) / c.frameRate, duration: (b - a + 1) / c.frameRate,
-                     fps: fps, base: st.frames.base };
+                     fps: fps, base: st.frames.base, first: a };
         }
 
         function doQueue(renderNow) {
@@ -1477,7 +1474,7 @@
                 for (i = 0; i < todo.length; i++) {
                     var out = plan[todo[i]];
                     step = "making the " + todo[i] + " render comp";
-                    var rc = renderComp(folder, c, out, fps, sp.base);
+                    var rc = renderComp(folder, c, out, fps, sp);
                     made.push({ kind: todo[i], comp: rc, out: out });
                     step = "adding the " + todo[i] + " render to the queue";
                     var item = app.project.renderQueue.items.add(rc);
