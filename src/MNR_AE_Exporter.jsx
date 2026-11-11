@@ -34,7 +34,13 @@
                Any task lists every task folder in the shot, to publish
                somewhere other than the After Effects tasks. Open Folder
                shows the shot and task's media folder in File Explorer.
-            4. Frames come from the comp's work area, frame rate from the
+            4. Frames are numbered like the smAnim TIFF sequence in the comp
+               (BFP..._v001.1000.tif in the comp -> the exports start at
+               1000 too, handles and all), wherever the artist put the layer.
+               The range is the TIFF frames in the comp, and every frame is
+               checked to be in the TIFF folder. Override frames to type
+               your own range. With no TIFF in the comp, the comp's own
+               frame numbers and work area are used. Frame rate from the
                comp (Override to change it).
             5. Add to Render Queue, or Add & Render.
 
@@ -371,6 +377,46 @@
         return miss.length ? "Fill in: " + miss.join(", ") + "." : "";
     }
 
+    function tifFrames(names, stem) {
+        /* Sorted frame numbers of stem.####.tif / stem_####.tif in a folder. */
+        var out = [], seen = {};
+        var head = lower(stem);
+        for (var i = 0; i < names.length; i++) {
+            var n = lower(names[i]);
+            if (n.substr(0, head.length) !== head) { continue; }
+            var m = n.substr(head.length).match(/^[._](\d+)\.tiff?$/);
+            if (!m) { continue; }
+            var f = parseInt(m[1], 10);
+            if (!seen[f]) { seen[f] = true; out.push(f); }
+        }
+        out.sort(function (a, b) { return a - b; });
+        return out;
+    }
+
+    function frameRanges(nums) {
+        /* [1043, 1050, 1051, 1052] -> "1043, 1050-1052" */
+        var parts = [];
+        var i = 0;
+        while (i < nums.length) {
+            var j = i;
+            while (j + 1 < nums.length && nums[j + 1] === nums[j] + 1) { j++; }
+            parts.push(i === j ? String(nums[i]) : nums[i] + "-" + nums[j]);
+            i = j + 1;
+        }
+        return parts.join(", ");
+    }
+
+    function checkFrames(have, start, end) {
+        /* Frames in start..end that are not in the TIFF folder. */
+        var set = {};
+        for (var i = 0; i < have.length; i++) { set[have[i]] = true; }
+        var missing = [];
+        for (var f = start; f <= end; f++) {
+            if (!set[f]) { missing.push(f); }
+        }
+        return missing;
+    }
+
     function templateFor(have, kind) {
         /* The first of an output's template names that After Effects has, or "". */
         var names = OUTPUTS[kind].names;
@@ -394,6 +440,7 @@
         shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
         outputSize: outputSize, templateFor: templateFor, presetsFiles: presetsFiles,
+        tifFrames: tifFrames, frameRanges: frameRanges, checkFrames: checkFrames,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
     if (typeof module !== "undefined" && module.exports) {
@@ -468,20 +515,39 @@
         return null;
     }
 
+    function plainTiming(layer) {
+        /* No time remap or stretch, so layer time = comp time - startTime. */
+        try {
+            return !layer.timeRemapEnabled && Math.abs(layer.stretch - 100) < 0.001;
+        } catch (e) { return false; }
+    }
+
     function findTiff(comp, depth, seen) {
-        /* File name of the stop-motion TIFF sequence used in a comp (or a
-           comp inside it), smAnim ones first. */
+        /* The stop-motion TIFF sequence used in a comp (or a comp inside it),
+           smAnim ones first, with where it sits in the comp's time:
+             {name, parsed, smAnim, folder, offset, inP, outP, ok}
+           offset: comp time of the sequence's first frame; inP / outP: when
+           it is visible; ok: false when stretched, remapped or at another
+           frame rate, so its frame numbers cannot be worked out. */
         var found = null;
         seen = seen || {};
         for (var i = 1; i <= comp.numLayers; i++) {
-            var src;
-            try { src = comp.layer(i).source; } catch (e) { src = null; }
+            var layer, src;
+            try { layer = comp.layer(i); src = layer.source; } catch (e) { src = null; }
             if (!src) { continue; }
             if (src instanceof CompItem) {
                 if (depth > 0 && !seen[src.id]) {
                     seen[src.id] = true;
                     var inner = findTiff(src, depth - 1, seen);
-                    if (inner && (!found || inner.smAnim)) { found = inner; }
+                    if (inner) {
+                        inner.offset += layer.startTime;
+                        inner.inP = Math.max(layer.inPoint, layer.startTime + inner.inP);
+                        inner.outP = Math.min(layer.outPoint, layer.startTime + inner.outP);
+                        inner.ok = inner.ok && plainTiming(layer) &&
+                            Math.abs(src.frameRate - comp.frameRate) < 0.001;
+                        if (!found || (inner.smAnim && !found.smAnim)) { found = inner; }
+                        if (inner.smAnim) { return found; }
+                    }
                 }
                 continue;
             }
@@ -491,12 +557,51 @@
                 if (!/\.tiff?$/i.test(name)) { continue; }
                 var parsed = parseLayerName(name);
                 if (!parsed) { continue; }
-                var hit = { name: name, parsed: parsed, smAnim: lower(parsed.task) === "smanim" };
+                var hit = {
+                    name: name, parsed: parsed, smAnim: lower(parsed.task) === "smanim",
+                    folder: src.mainSource.file.parent.fsName.replace(/\\/g, "/"),
+                    offset: layer.startTime, inP: layer.inPoint, outP: layer.outPoint,
+                    ok: plainTiming(layer) && Math.abs(src.frameRate - comp.frameRate) < 0.001
+                };
                 if (hit.smAnim) { return hit; }
                 if (!found) { found = hit; }
             } catch (e2) {}
         }
         return found;
+    }
+
+    function frameInfo(comp) {
+        /* How the exports are numbered and the default range.
+             base:  frame number at comp time 0
+             start, end: default range (frame numbers)
+             have:  frame numbers in the TIFF folder ([] with no TIFF)
+             note:  what it is numbered from */
+        var fps = comp.frameRate;
+        var tif = findTiff(comp, 2);
+        if (tif && tif.ok) {
+            var have = tifFrames(FS.listNames(tif.folder), stemOf(tif.name));
+            if (have.length) {
+                var base = have[0] - Math.round(tif.offset * fps);
+                var first = base + Math.round(Math.max(tif.inP, 0) * fps);
+                var last = base + Math.round(Math.min(tif.outP, comp.duration) * fps) - 1;
+                return {
+                    base: base, have: have,
+                    start: Math.max(first, have[0]), end: Math.min(last, have[have.length - 1]),
+                    note: "Numbered like " + stemOf(tif.name) + "  (" + have[0] + "-" +
+                        have[have.length - 1] + ", " + have.length + " frames)"
+                };
+            }
+        }
+        var off = frameOffset(comp);
+        var start = off + Math.round(comp.workAreaStart * fps);
+        return {
+            base: off, have: [],
+            start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,
+            note: !tif ? "No smAnim TIFF in this comp: comp frame numbers, work area range." :
+                (tif.ok ? "The TIFF folder could not be read: comp frame numbers, work area range." :
+                 "The TIFF layer is stretched, time-remapped or at another frame rate: " +
+                 "comp frame numbers, work area range.")
+        };
     }
 
     function guessLayer(comp) {
@@ -549,14 +654,16 @@
         top.locked = true;
     }
 
-    function renderComp(folder, src, out, fps) {
+    function renderComp(folder, src, out, fps, base) {
         /* The comp an output renders from: src nested, scaled, maybe on the checker. */
         removeCompNamed(folder, out.comp);
         var size = outputSize(src.width, src.height, out.scale, out.checker);
         var w = size[0], h = size[1];
         var c = app.project.items.addComp(out.comp, w, h, src.pixelAspect, src.duration, fps);
         c.parentFolder = folder;
-        try { c.displayStartTime = src.displayStartTime; } catch (e) {}
+        // Comp frame numbers = the TIFF's (or the comp's) frame numbers, so
+        // the templates' Use Comp Frame Number writes them.
+        try { c.displayStartTime = base / src.frameRate; } catch (e) {}
         c.bgColor = [0, 0, 0];
         if (out.checker) { addChecker(c, CHECKER_SIZE / out.scale); }
         var layer = c.layers.add(src);
@@ -874,8 +981,14 @@
         fpsText.characters = 6;
         fpsText.enabled = false;
         var fpsOverride = r4.add("checkbox", undefined, "Override");
-        var framesNote = label(s4, "From the comp's work area and frame rate.");
+        startText.enabled = endText.enabled = false;
+        var framesOverride = r4.add("checkbox", undefined, "Override frames");
+        framesOverride.helpTip = "Type your own Start and End. They are still numbered like the TIFF.";
+        var framesNote = label(s4, "");
+        framesNote.characters = 80;
         styleText(framesNote, C_DIM, 11, false);
+        var framesCheck = label(s4, "");
+        framesCheck.characters = 80;
 
         // ── 5. Outputs
         var s5 = section(win, "5  Outputs");
@@ -991,11 +1104,13 @@
             var fps = Math.round(c.frameRate * 1000) / 1000;
             compInfo.text = c.width + " x " + c.height + "   ·   " + fps + " fps   ·   " +
                 Math.round(c.duration * c.frameRate) + " frames";
-            var off = frameOffset(c);
-            var start = off + Math.round(c.workAreaStart * c.frameRate);
-            startText.text = String(start);
-            endText.text = String(start + Math.max(1, Math.round(c.workAreaDuration * c.frameRate)) - 1);
+            st.frames = frameInfo(c);
+            if (!framesOverride.value) {
+                startText.text = String(st.frames.start);
+                endText.text = String(st.frames.end);
+            }
             if (!fpsOverride.value) { fpsText.text = String(fps); }
+            framesChanged();
             var g = guessLayer(c);
             layerText.text = g.layer;
             layerFrom.text = g.from;
@@ -1057,13 +1172,51 @@
                 "No media folder yet, opened " + path.replace(/\//g, "\\"));
         }
 
+        function frameProblems() {
+            /* Text of what is wrong with the range, or "". */
+            var f = st.frames;
+            var a = parseInt(startText.text, 10), b = parseInt(endText.text, 10);
+            if (!f || isNaN(a) || isNaN(b) || b < a) { return "Start and End frames are not right."; }
+            var c = comp();
+            var probs = [];
+            var firstN = f.base, lastN = f.base + Math.round(c.duration * c.frameRate) - 1;
+            if (a < firstN || b > lastN) {
+                probs.push("The range goes outside the comp (" + firstN + "-" + lastN + ").");
+            }
+            if (f.have.length) {
+                var missing = checkFrames(f.have, a, b);
+                if (missing.length) {
+                    probs.push(missing.length + (missing.length === 1 ? " frame is" : " frames are") +
+                        " missing from the TIFF folder: " + frameRanges(missing));
+                }
+            }
+            return probs.join("  ");
+        }
+
+        function framesChanged() {
+            var f = st.frames;
+            if (!f) { return; }
+            framesNote.text = f.note + (fpsOverride.value && f.have.length ?
+                "   Frame rate override: numbers will not line up with the TIFF." : "");
+            var prob = frameProblems();
+            var a = parseInt(startText.text, 10), b = parseInt(endText.text, 10);
+            if (prob) {
+                framesCheck.text = prob;
+                styleText(framesCheck, C_BAD, 11, true);
+            } else {
+                framesCheck.text = (b - a + 1) + " frames, " + a + "-" + b +
+                    (f.have.length ? ", all there in the TIFF folder." : ".");
+                styleText(framesCheck, C_GOOD, 11, false);
+            }
+        }
+
         // ─────────── actions ───────────
 
         function span(c, fps) {
-            var off = frameOffset(c);
             var a = parseInt(startText.text, 10), b = parseInt(endText.text, 10);
             if (isNaN(a) || isNaN(b) || b < a) { return null; }
-            return { start: (a - off) / c.frameRate, duration: (b - a + 1) / c.frameRate, fps: fps };
+            return { start: (a - st.frames.base) / c.frameRate, duration: (b - a + 1) / c.frameRate,
+                     fps: fps, base: st.frames.base };
         }
 
         function doQueue(renderNow) {
@@ -1081,6 +1234,8 @@
             if (!(fps > 0)) { say("The frame rate is not a number.", false); return; }
             var sp = span(c, fps);
             if (!sp) { say("Start and End frames are not right.", false); return; }
+            var prob = frameProblems();
+            if (prob && !confirm(prob + "\n\nQueue it anyway?", true, PANEL_NAME)) { return; }
             if (!canWriteFiles()) {
                 alert("Tick Edit > Preferences > Scripting & Expressions >\n" +
                       "\"Allow Scripts to Write Files and Access Network\"\n" +
@@ -1109,7 +1264,7 @@
                 var folder = exportFolder();
                 for (i = 0; i < todo.length; i++) {
                     var out = plan[todo[i]];
-                    var rc = renderComp(folder, c, out, fps);
+                    var rc = renderComp(folder, c, out, fps, sp.base);
                     var item = app.project.renderQueue.items.add(rc);
                     made.push({ kind: todo[i], comp: rc, item: item, out: out });
                 }
@@ -1183,7 +1338,17 @@
         fpsOverride.onClick = function () {
             fpsText.enabled = fpsOverride.value;
             if (!fpsOverride.value && comp()) { fpsText.text = String(Math.round(comp().frameRate * 1000) / 1000); }
+            framesChanged();
         };
+        framesOverride.onClick = function () {
+            startText.enabled = endText.enabled = framesOverride.value;
+            if (!framesOverride.value && st.frames) {
+                startText.text = String(st.frames.start);
+                endText.text = String(st.frames.end);
+            }
+            framesChanged();
+        };
+        startText.onChange = endText.onChange = framesChanged;
         bQueue.onClick = function () { doQueue(false); };
         bRender.onClick = function () { doQueue(true); };
 
