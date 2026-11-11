@@ -766,6 +766,29 @@
         top.locked = true;
     }
 
+    function setStartFrame(c, first, fps) {
+        /* Makes the comp's first frame number exactly first. A start time of
+           first / fps (1001 / 12 = 83.41666 s) can round down to 1000, so the
+           start frame is set directly when After Effects has it (17.1+), else
+           the time is nudged a hair forward. Checked and logged. */
+        var done = false;
+        try {
+            if (typeof c.displayStartFrame !== "undefined") {
+                c.displayStartFrame = first;
+                done = c.displayStartFrame === first;
+            }
+        } catch (e) {}
+        if (!done) {
+            try { c.displayStartTime = (first + 0.001) / fps; } catch (e2) {}
+        }
+        var now = "?";
+        try { now = typeof c.displayStartFrame !== "undefined" ? c.displayStartFrame :
+              Math.floor(c.displayStartTime * fps + 1e-6); } catch (e3) {}
+        if (String(now) !== String(first)) {
+            log("  WARNING start frame is " + now + ", wanted " + first);
+        }
+    }
+
     function renderComp(folder, src, out, fps, sp) {
         /* The comp an output renders from: exactly the export range long,
            starting at the export's first frame number, with src nested
@@ -779,7 +802,7 @@
         c.parentFolder = folder;
         // Comp frame numbers = the export's frame numbers (1001...), so the
         // templates' Use Comp Frame Number writes them.
-        try { c.displayStartTime = sp.first / fps; } catch (e) {}
+        setStartFrame(c, sp.first, fps);
         c.bgColor = [0, 0, 0];
         if (out.checker) { addChecker(c, CHECKER_SIZE / out.scale); }
         // New layers are put at the comp's start, however After Effects
