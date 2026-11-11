@@ -17,6 +17,7 @@
       - proxies renamed:  <name>_Proxy\...-main_v001.####.png
                        -> <name with -proxy>\png\...-proxy_v001.####.png
       - sequences that started at 0000 / 0001 renumbered (e.g. to 1001)
+      - a folder's layer name typo fixed from its files (pohatuk01 -> pohatu01)
       - extras in file names dropped: ..._kopaka01-main-ACEScg-16bf_v001
         -> ..._kopaka01-main_v001
 
@@ -117,6 +118,17 @@
                 var base = shotDir + task + "/export/publish/media/";
                 add(base + fixed.name + "/" + sub + newFile);
                 add(base + fixed.name + "/" + rest);
+                // A typo in the folder's layer name was fixed from the files
+                // (pohatuk01 folder holding pohatu01 files -> pohatu01).
+                var fm = file.match(/^(.+?_v\d+)(.*)$/i);
+                var ft = fm ? fm[1].split("_") : [];
+                var nt = fixed.name.split("_");
+                if (ft.length === 6 && lower(ft[5]) === lower(nt[5]) &&
+                        lower(ft[4].split("-")[0]) !== lower(nt[4].split("-")[0])) {
+                    nt[4] = ft[4].split("-")[0] + nt[4].substr(nt[4].split("-")[0].length);
+                    var typoFixed = nt.join("_");
+                    add(base + typoFixed + "/" + sub + typoFixed + fm[2]);
+                }
             }
         }
         add(moved);
