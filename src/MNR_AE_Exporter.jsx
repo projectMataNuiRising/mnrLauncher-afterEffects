@@ -909,6 +909,16 @@
         // Crop would scale twice.
         noResize(om);
         om = item.outputModule(1);
+        // Image sequences are numbered from the render comp's start frame
+        // (1001...), even if a template has Use Comp Frame Number off.
+        if (kind !== "mp4") {
+            try { om.setSettings({ "Use Comp Frame Number": true }); } catch (e5) {
+                try { om.setSettings({ "Use Comp Frame Number": "true" }); } catch (e6) {
+                    log("  could not switch on Use Comp Frame Number for " + kind + ": " + e6.toString());
+                }
+            }
+            om = item.outputModule(1);
+        }
         om.file = new File(out.file);
         return item;
     }
