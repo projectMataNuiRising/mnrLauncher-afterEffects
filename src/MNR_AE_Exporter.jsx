@@ -606,11 +606,14 @@
         /* The stop-motion TIFF sequence used in a comp (or a comp inside it),
            smAnim ones first, with where it sits in the comp's time:
              {name, parsed, smAnim, folder, offset, inP, outP, ok}
-           offset: comp time of the sequence's first frame; inP / outP: when
-           it is visible; ok: false when stretched, remapped or at another
+           offset: time of the sequence's first frame from the comp's start;
+           inP / outP: when it is visible (also from the comp's start); ok: false when stretched, remapped or at another
            frame rate, so its frame numbers cannot be worked out. */
         var found = null;
         seen = seen || {};
+        // After Effects counts layer times from the comp's starting frame
+        // number (Start Timecode); everything here is from the comp's start.
+        var d = comp.displayStartTime || 0;
         for (var i = 1; i <= comp.numLayers; i++) {
             var layer, src;
             try { layer = comp.layer(i); src = layer.source; } catch (e) { src = null; }
@@ -620,9 +623,10 @@
                     seen[src.id] = true;
                     var inner = findTiff(src, depth - 1, seen);
                     if (inner) {
-                        inner.offset += layer.startTime;
-                        inner.inP = Math.max(layer.inPoint, layer.startTime + inner.inP);
-                        inner.outP = Math.min(layer.outPoint, layer.startTime + inner.outP);
+                        var lst = layer.startTime - d;
+                        inner.offset += lst;
+                        inner.inP = Math.max(layer.inPoint - d, lst + inner.inP);
+                        inner.outP = Math.min(layer.outPoint - d, lst + inner.outP);
                         inner.ok = inner.ok && plainTiming(layer) &&
                             Math.abs(src.frameRate - comp.frameRate) < 0.001;
                         if (!found || (inner.smAnim && !found.smAnim)) { found = inner; }
@@ -644,7 +648,7 @@
                 var hit = {
                     name: stem, parsed: parsed, smAnim: lower(parsed.task) === "smanim",
                     folder: folder,
-                    offset: layer.startTime, inP: layer.inPoint, outP: layer.outPoint,
+                    offset: layer.startTime - d, inP: layer.inPoint - d, outP: layer.outPoint - d,
                     ok: plainTiming(layer) && Math.abs(src.frameRate - comp.frameRate) < 0.001
                 };
                 if (hit.smAnim) { return hit; }
@@ -676,7 +680,7 @@
             }
         }
         var off = frameOffset(comp);
-        var start = off + Math.round(comp.workAreaStart * fps);
+        var start = off + Math.round((comp.workAreaStart - comp.displayStartTime) * fps);
         return {
             base: off, have: [], stem: "",
             start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,
@@ -752,8 +756,8 @@
         try { c.displayStartTime = base / src.frameRate; } catch (e) {}
         c.bgColor = [0, 0, 0];
         if (out.checker) { addChecker(c, CHECKER_SIZE / out.scale); }
+        // Added layers start at the comp's start (whatever its start frame).
         var layer = c.layers.add(src);
-        layer.startTime = 0;
         if (out.scale !== 1) {
             layer.property("ADBE Transform Group").property("ADBE Scale").setValue([100 / out.scale, 100 / out.scale]);
             layer.property("ADBE Transform Group").property("ADBE Position").setValue([w / 2, h / 2]);
@@ -863,7 +867,12 @@
 
     function setUpItem(item, kind, out, span) {
         try { item.applyTemplate(RENDER_TEMPLATE); } catch (e) {}
-        item.timeSpanStart = span.start;
+        // The render queue counts from the comp's start frame (e.g. 1001 at
+        // 12 fps = 83.4 s), not from 0.
+        var compStart = 0;
+        try { compStart = item.comp.displayStartTime || 0; } catch (e2) {}
+        item.timeSpanDuration = span.duration;
+        item.timeSpanStart = compStart + span.start;
         item.timeSpanDuration = span.duration;
         var om = item.outputModule(1);
         om.applyTemplate(templateFor(templateList(om), kind));
