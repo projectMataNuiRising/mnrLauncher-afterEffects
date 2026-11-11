@@ -17,6 +17,8 @@
       - proxies renamed:  <name>_Proxy\...-main_v001.####.png
                        -> <name with -proxy>\png\...-proxy_v001.####.png
       - sequences that started at 0000 / 0001 renumbered (e.g. to 1001)
+      - extras in file names dropped: ..._kopaka01-main-ACEScg-16bf_v001
+        -> ..._kopaka01-main_v001
 
     For a sequence, the frames in its new place are counted. The same
     number of frames as the footage had, starting at another number, is
@@ -77,11 +79,10 @@
         return { name: t.join("_"), proxy: proxy };
     }
 
-    function fixFileName(file, oldFolder, newFolder, proxy) {
-        /* A file with the same layer and version as its folder gets the
-           folder's new project / sequence / shot / task tokens; its own
-           layer-variant part is kept (kopaka01-main-ACEScg-16bf stays), with
-           main -> proxy for a renamed proxy. */
+    function fixFileName(file, oldFolder, newFolder) {
+        /* A file with the same layer and version as its folder is named
+           after the folder's new name up to the version (extras like
+           -ACEScg-16bf dropped), frame number and extension kept. */
         var m = String(file).match(/^(.+?_v\d+)(.*)$/i);
         if (!m) { return file; }
         var ft = m[1].split("_");
@@ -89,17 +90,7 @@
         if (ft.length !== 6 || ot.length < 6) { return file; }
         var fLayer = lower(ft[4].split("-")[0]), oLayer = lower(ot[4].split("-")[0]);
         if (fLayer !== oLayer || lower(ft[5]) !== lower(ot[5])) { return file; }
-        var nt = String(newFolder).split("_");
-        var seg = ft[4];
-        if (proxy) {
-            var dash = seg.indexOf("-");
-            if (dash > 0) {
-                var parts = seg.substr(dash + 1).split("-");
-                parts[0] = proxyVariant(parts[0]);
-                seg = seg.substr(0, dash) + "-" + parts.join("-");
-            }
-        }
-        return [nt[0], nt[1], nt[2], nt[3], seg, ft[5]].join("_") + m[2];
+        return newFolder + m[2];
     }
 
     function newPlaces(path) {
@@ -120,7 +111,7 @@
                 var slash = rest.lastIndexOf("/");
                 var sub = slash >= 0 ? rest.substr(0, slash + 1) : "";
                 var file = slash >= 0 ? rest.substr(slash + 1) : rest;
-                var newFile = fixFileName(file, folder, fixed.name, fixed.proxy);
+                var newFile = fixFileName(file, folder, fixed.name);
                 if (!sub && /\.exr$/i.test(file)) { sub = "exr/"; }
                 if (!sub && fixed.proxy && /\.png$/i.test(file)) { sub = "png/"; }
                 var base = shotDir + task + "/export/publish/media/";
