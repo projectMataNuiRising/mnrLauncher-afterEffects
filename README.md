@@ -91,6 +91,17 @@ present. The pipeline check uses a plain folder existence test and
 falls back to a "running standalone" state, so the panel still opens
 and works on a machine with no pCloud mounted.
 
+## MNR Relink
+
+`src/MNR_Relink_Startup.jsx` (in `Scripts\Startup`) checks each project
+as it is opened for missing footage under `P:\01-projects` that the
+pipeline fix scripts moved or renamed (smAnim TIFFs moved to
+rotoKeyIngest, the 4th name token fixed to the task, BPF -> BFP, EXRs
+into `exr\`, `_Proxy` folders to `-proxy` with `png\`). Found ones are
+listed (was / now) and replaced only when the artist says so, keeping the
+footage's frame rate and alpha interpretation. Logged to
+`%APPDATA%\MNR_Launcher\ae_relink.log`.
+
 ## MNR AE Exporter
 
 `src/MNR_AE_Exporter.jsx` sets up publish renders of a comp in the

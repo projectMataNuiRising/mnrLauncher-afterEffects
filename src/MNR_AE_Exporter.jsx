@@ -668,7 +668,7 @@
                 var parsed = parseLayerName(stem);
                 if (!parsed) { continue; }
                 var hit = {
-                    name: stem, parsed: parsed, smAnim: lower(parsed.task) === "smanim",
+                    name: stem, parsed: parsed, smAnim: lower(parsed.task) === "smanim" || lower(parsed.task) === "rotokeyingest",
                     folder: folder,
                     offset: layer.startTime - d, inP: layer.inPoint - d, outP: layer.outPoint - d,
                     ok: plainTiming(layer) && Math.abs(src.frameRate - comp.frameRate) < 0.001
