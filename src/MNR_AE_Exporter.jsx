@@ -215,6 +215,23 @@
             return out;
         },
         exists: function (path) { return new File(path).exists || new Folder(path).exists; },
+        isDir: function (path) { return new Folder(path).exists; },
+        hasFiles: function (path, depth) {
+            /* Any file in a folder or the folders inside it (a few levels). */
+            var f = new Folder(path);
+            if (!f.exists) { return false; }
+            var items = f.getFiles();
+            for (var i = 0; i < items.length; i++) {
+                if (items[i] instanceof File) { return true; }
+            }
+            if ((depth || 0) >= 3) { return false; }
+            for (var j = 0; j < items.length; j++) {
+                if (items[j] instanceof Folder && FS.hasFiles(items[j].fsName, (depth || 0) + 1)) {
+                    return true;
+                }
+            }
+            return false;
+        },
         makeDirs: function (path) {
             var f = new Folder(path);
             if (f.exists) { return true; }
@@ -318,13 +335,18 @@
     }
 
     function nextVersion(ctx, layer, variant) {
-        /* One past the highest version already in the media folder. */
+        /* One past the highest version already in the media folder. Empty
+           version folders (queued, never rendered) do not count, so a retry
+           reuses them instead of moving on to the next version. */
         var prefix = lower(namePrefix(ctx, layer, variant) + "_v");
-        var names = FS.listNames(mediaDir(ctx));
+        var media = mediaDir(ctx);
+        var names = FS.listNames(media);
         var best = 0;
         for (var i = 0; i < names.length; i++) {
             var n = lower(names[i]);
             if (!startsWith(n, prefix)) { continue; }
+            var full = join(media, names[i]);
+            if (FS.isDir(full) && !FS.hasFiles(full)) { continue; }
             var m = n.substr(prefix.length).match(/^(\d+)/);
             if (m && parseInt(m[1], 10) > best) { best = parseInt(m[1], 10); }
         }
