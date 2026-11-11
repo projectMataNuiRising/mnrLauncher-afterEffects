@@ -18,6 +18,8 @@
                        -> <name with -proxy>\png\...-proxy_v001.####.png
       - sequences that started at 0000 / 0001 renumbered (e.g. to 1001)
       - a folder's layer name typo fixed from its files (pohatuk01 -> pohatu01)
+      - frames with another version than their folder renamed to the
+        folder's version (v001 frames in a v002 folder -> v002)
       - extras in file names dropped: ..._kopaka01-main-ACEScg-16bf_v001
         -> ..._kopaka01-main_v001
 
@@ -81,7 +83,7 @@
     }
 
     function fixFileName(file, oldFolder, newFolder) {
-        /* A file with the same layer and version as its folder is named
+        /* A file with the same layer as its folder is named
            after the folder's new name up to the version (extras like
            -ACEScg-16bf dropped), frame number and extension kept. */
         var m = String(file).match(/^(.+?_v\d+)(.*)$/i);
@@ -90,7 +92,9 @@
         var ot = String(oldFolder).split("_");
         if (ft.length !== 6 || ot.length < 6) { return file; }
         var fLayer = lower(ft[4].split("-")[0]), oLayer = lower(ot[4].split("-")[0]);
-        if (fLayer !== oLayer || lower(ft[5]) !== lower(ot[5])) { return file; }
+        // Same layer is enough: frames with another version than their
+        // folder (v001 frames in a v002 folder) took the folder's version.
+        if (fLayer !== oLayer) { return file; }
         return newFolder + m[2];
     }
 
