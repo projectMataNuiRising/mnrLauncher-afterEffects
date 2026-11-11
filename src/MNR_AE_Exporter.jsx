@@ -627,11 +627,23 @@
         return null;
     }
 
-    function plainTiming(layer) {
-        /* No time remap or stretch, so layer time = comp time - startTime. */
+    function fpsText(f) { return String(Math.round(f * 1000) / 1000); }
+
+    function timingProblem(layer, comp, srcFps) {
+        /* Why a layer's frames cannot be mapped to its comp's, or "". */
         try {
-            return !layer.timeRemapEnabled && Math.abs(layer.stretch - 100) < 0.001;
-        } catch (e) { return false; }
+            if (layer.timeRemapEnabled) {
+                return "time remap is on for \"" + layer.name + "\" in \"" + comp.name + "\"";
+            }
+            if (Math.abs(layer.stretch - 100) > 0.001) {
+                return "\"" + layer.name + "\" in \"" + comp.name + "\" is stretched to " + layer.stretch + "%";
+            }
+            if (Math.abs(srcFps - comp.frameRate) > 0.001) {
+                return "\"" + layer.source.name + "\" is " + fpsText(srcFps) + " fps but \"" + comp.name +
+                    "\" is " + fpsText(comp.frameRate) + " fps";
+            }
+        } catch (e) { return "could not read \"" + layer.name + "\""; }
+        return "";
     }
 
     function findTiff(comp, depth, seen) {
@@ -659,8 +671,8 @@
                         inner.offset += lst;
                         inner.inP = Math.max(layer.inPoint - d, lst + inner.inP);
                         inner.outP = Math.min(layer.outPoint - d, lst + inner.outP);
-                        inner.ok = inner.ok && plainTiming(layer) &&
-                            Math.abs(src.frameRate - comp.frameRate) < 0.001;
+                        var why = timingProblem(layer, comp, src.frameRate);
+                        if (why && inner.ok) { inner.ok = false; inner.why = why; }
                         if (!found || (inner.smAnim && !found.smAnim)) { found = inner; }
                         if (inner.smAnim) { return found; }
                     }
@@ -681,8 +693,10 @@
                     name: stem, parsed: parsed, smAnim: lower(parsed.task) === "smanim" || lower(parsed.task) === "rotokeyingest",
                     folder: folder,
                     offset: layer.startTime - d, inP: layer.inPoint - d, outP: layer.outPoint - d,
-                    ok: plainTiming(layer) && Math.abs(src.frameRate - comp.frameRate) < 0.001
+                    ok: true, why: ""
                 };
+                hit.why = timingProblem(layer, comp, src.frameRate);
+                hit.ok = !hit.why;
                 if (hit.smAnim) { return hit; }
                 if (!found) { found = hit; }
             } catch (e2) {}
@@ -718,8 +732,8 @@
             start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,
             note: !tif ? "no smAnim TIFF in this comp, so the comp's own frame numbers and work area" :
                 (tif.ok ? "the TIFF folder could not be read, so the comp's own frame numbers and work area" :
-                 "the TIFF layer is stretched, time-remapped or at another frame rate, so the comp's " +
-                 "own frame numbers and work area")
+                 "the comp's own frame numbers and work area, because " + tif.why +
+                 " (fix that and press Use Active Comp to number it like the TIFFs)")
         };
     }
 
