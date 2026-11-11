@@ -1,10 +1,10 @@
 {
   "name": "MNR Scene Manager",
-  "version": "0.3.28",
+  "version": "0.3.30",
   "version_base": "0.3",
   "channel": "main",
-  "built": "2026-11-11 05:30 UTC",
-  "commit": "780d471",
+  "built": "2026-11-11 05:34 UTC",
+  "commit": "e81e171",
   "_comment_version": "version, channel, built and commit are written by the Stamp plugin version action on every push to main (version = version_base.<build>). Edit only version_base by hand.",
   "host": "after_effects",
   "install_type": "scriptui_panel",
