@@ -726,7 +726,15 @@
         var before = rq.numItems;
         var io = new ImportOptions(f);
         io.importAs = ImportAsType.PROJECT;
-        var imported = app.project.importFile(io);
+        var imported;
+        try {
+            imported = app.project.importFile(io);
+        } catch (e) {
+            // Most likely saved in a newer After Effects than this one.
+            throw new Error("Could not read the presets project:\n" + f.fsName + "\n\n" + e.toString() +
+                "\n\nIf it was saved in a newer After Effects, it needs saving as a copy for this " +
+                "version (" + app.version + ") with File > Save As > Save a Copy As.");
+        }
         var made = [];
         try {
             for (var i = rq.numItems; i > before; i--) {
