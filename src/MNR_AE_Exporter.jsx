@@ -124,6 +124,7 @@
     var SCRIPT_DIR = (function () {
         try { return new File($.fileName).parent.fsName.replace(/\\/g, "/"); } catch (e) { return ""; }
     }());
+    var PIPELINE_FPS = [12, 24];             // other frame rates are flagged
     var SCALES = [1, 2, 4, 8];
     var SCALE_LABELS = ["1/1 res", "1/2 res", "1/4 res", "1/8 res"];
     var MP4_TARGET = [1920, 1080];          // MP4 defaults to the scale closest to this
@@ -404,6 +405,15 @@
         return miss.length ? "Fill in: " + miss.join(", ") + "." : "";
     }
 
+    function fpsProblem(fps) {
+        /* "" for 12 or 24 fps, else a warning. */
+        for (var i = 0; i < PIPELINE_FPS.length; i++) {
+            if (Math.abs(fps - PIPELINE_FPS[i]) < 0.001) { return ""; }
+        }
+        return (Math.round(fps * 1000) / 1000) + " fps is not a pipeline frame rate (" +
+            PIPELINE_FPS.join(" or ") + " fps).";
+    }
+
     function closestScale(width, height, target) {
         /* The scale in SCALES whose size is closest to target [w, h] (by area). */
         var want = target[0] * target[1];
@@ -526,7 +536,7 @@
         shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
         outputSize: outputSize, templateFor: templateFor, pickPresets: pickPresets,
-        closestScale: closestScale, folderStem: folderStem, shortStem: shortStem,
+        closestScale: closestScale, folderStem: folderStem, shortStem: shortStem, fpsProblem: fpsProblem,
         tifFrames: tifFrames, frameRanges: frameRanges, checkFrames: checkFrames,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
@@ -1283,8 +1293,10 @@
                 return;
             }
             var fps = Math.round(c.frameRate * 1000) / 1000;
+            var fpsWarn = fpsProblem(c.frameRate);
             compInfo.text = c.width + " x " + c.height + "   ·   " + fps + " fps   ·   " +
-                Math.round(c.duration * c.frameRate) + " frames";
+                Math.round(c.duration * c.frameRate) + " frames" + (fpsWarn ? "      " + fpsWarn : "");
+            styleText(compInfo, fpsWarn ? C_BAD : C_DIM, 11, !!fpsWarn);
             st.frames = frameInfo(c);
             if (!framesOverride.value) {
                 startText.text = String(st.frames.start);
@@ -1408,8 +1420,11 @@
                     (prob ? "   " + prob : "");
             }
             styleText(framesCheck, prob ? C_BAD : C_GOOD, 11, true);
+            fpsText.onChange = framesChanged;
             var notes = [];
             if (f.note) { notes.push("Numbered from " + f.note + "."); }
+            var usedFps = fpsOverride.value ? parseFloat(fpsText.text) : comp().frameRate;
+            if (usedFps > 0 && fpsProblem(usedFps)) { notes.push("Export frame rate: " + fpsProblem(usedFps)); }
             if (fpsOverride.value && f.have.length) {
                 notes.push("Frame rate override: the numbers will not line up with the source TIFFs.");
             }
@@ -1440,6 +1455,9 @@
             if (!(fps > 0)) { say("The frame rate is not a number.", false); return; }
             var sp = span(c, fps);
             if (!sp) { say("Start and End frames are not right.", false); return; }
+            if (fpsProblem(fps) && !confirm(fpsProblem(fps) + "\n\nExport at " + fps + " fps anyway?", true, PANEL_NAME)) {
+                return;
+            }
             var prob = frameProblems();
             if (prob && !confirm(prob + "\n\nQueue it anyway?", true, PANEL_NAME)) { return; }
             if (!canWriteFiles()) {
