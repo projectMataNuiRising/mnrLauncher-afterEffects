@@ -124,9 +124,10 @@
     var SCRIPT_DIR = (function () {
         try { return new File($.fileName).parent.fsName.replace(/\\/g, "/"); } catch (e) { return ""; }
     }());
-    var MP4_SCALES = [2, 4];
-    var PROXY_SCALES = [4, 8];
-    var SCALE_NAMES = { 1: "full res", 2: "1/2 res", 4: "1/4 res", 8: "1/8 res" };
+    var SCALES = [1, 2, 4, 8];
+    var SCALE_LABELS = ["1/1 res", "1/2 res", "1/4 res", "1/8 res"];
+    var MP4_TARGET = [1920, 1080];          // MP4 defaults to the scale closest to this
+    var PROXY_TARGET = [1280, 720];         // proxy defaults to the scale closest to this
     // template: the name the exporter saves; names: any of these is used.
     var OUTPUTS = {
         exr: { template: "MNR EXR ACEScg", format: /exr/i,
@@ -347,7 +348,7 @@
             exr: { dir: join(media, name, "exr"), file: join(media, name, "exr", name + ".[####].exr"),
                    comp: name + " [exr]", scale: 1, checker: false },
             mp4: { dir: media, file: join(media, name + ".mp4"),
-                   comp: name + " [mp4]", scale: mp4Scale || MP4_SCALES[0], checker: true },
+                   comp: name + " [mp4]", scale: mp4Scale || 2, checker: true },
             png: { dir: join(media, proxyName, "png"),
                    file: join(media, proxyName, "png", proxyName + ".[####].png"),
                    comp: proxyName + " [png]", scale: proxyScale, checker: false }
@@ -379,6 +380,43 @@
         if (!variant) { miss.push("variant"); }
         if (!/^\d+$/.test(trim(versionText)) || parseInt(versionText, 10) < 1) { miss.push("version"); }
         return miss.length ? "Fill in: " + miss.join(", ") + "." : "";
+    }
+
+    function closestScale(width, height, target) {
+        /* The scale in SCALES whose size is closest to target [w, h] (by area). */
+        var want = target[0] * target[1];
+        var best = SCALES[0], bestDiff = 1e9;
+        for (var i = 0; i < SCALES.length; i++) {
+            var area = (width / SCALES[i]) * (height / SCALES[i]);
+            var diff = Math.abs(Math.log(area / want));
+            if (diff < bestDiff) { best = SCALES[i]; bestDiff = diff; }
+        }
+        return best;
+    }
+
+    function folderStem(names, prefer) {
+        /* The sequence name used by most .####.tif files in a folder (the
+           files on disk, whatever the footage is called in After Effects).
+           prefer wins a tie. "" when there are none. */
+        var counts = {}, best = "", bestN = 0;
+        for (var i = 0; i < names.length; i++) {
+            var m = String(names[i]).match(/^(.+?)[._]\d+\.tiff?$/i);
+            if (!m) { continue; }
+            counts[m[1]] = (counts[m[1]] || 0) + 1;
+        }
+        for (var k in counts) {
+            if (!counts.hasOwnProperty(k)) { continue; }
+            if (counts[k] > bestN || (counts[k] === bestN && lower(k) === lower(prefer || ""))) {
+                best = k; bestN = counts[k];
+            }
+        }
+        return best;
+    }
+
+    function shortStem(stem) {
+        /* BFP102_SQ04_SH12_smAnim_gali01-main_v001 -> BFP102_SQ04_SH12_... */
+        var t = String(stem).split("_");
+        return t.length > 3 ? t.slice(0, 3).join("_") + "_..." : stem;
     }
 
     function tifFrames(names, stem) {
@@ -466,6 +504,7 @@
         shotDir: shotDir, taskChoices: taskChoices, folderToOpen: folderToOpen,
         makePlan: makePlan, alreadyThere: alreadyThere, checkInputs: checkInputs,
         outputSize: outputSize, templateFor: templateFor, pickPresets: pickPresets,
+        closestScale: closestScale, folderStem: folderStem, shortStem: shortStem,
         tifFrames: tifFrames, frameRanges: frameRanges, checkFrames: checkFrames,
         setRoot: function (r) { PROJECTS_ROOT = r; }
     };
@@ -477,6 +516,21 @@
     // ─────────────────────────────────────────────
     // After Effects side
     // ─────────────────────────────────────────────
+
+    function log(text) {
+        /* %APPDATA%\MNR_Launcher\ae_exporter.log, for working out problems. */
+        try {
+            var folder = new Folder(Folder.userData.fsName + "/MNR_Launcher");
+            if (!folder.exists) { folder.create(); }
+            var f = new File(folder.fsName + "/ae_exporter.log");
+            f.encoding = "UTF-8";
+            if (f.exists && f.length > 2000000) { f.remove(); }
+            if (f.open("a")) {
+                f.writeln(new Date().toString() + "  " + text);
+                f.close();
+            }
+        } catch (e) { /* logging is never worth failing over */ }
+    }
 
     function openProjectPath() {
         try {
@@ -579,13 +633,17 @@
             }
             try {
                 if (!(src.mainSource instanceof FileSource) || src.mainSource.isStill) { continue; }
-                var name = File.decode(src.mainSource.file.name);
-                if (!/\.tiff?$/i.test(name)) { continue; }
-                var parsed = parseLayerName(name);
+                var fileName = File.decode(src.mainSource.file.name);
+                if (!/\.tiff?$/i.test(fileName)) { continue; }
+                // The name comes from the files on disk, not the footage's
+                // name in After Effects (artists may rename that).
+                var folder = src.mainSource.file.parent.fsName.replace(/\\/g, "/");
+                var stem = folderStem(FS.listNames(folder), stemOf(fileName)) || stemOf(fileName);
+                var parsed = parseLayerName(stem);
                 if (!parsed) { continue; }
                 var hit = {
-                    name: name, parsed: parsed, smAnim: lower(parsed.task) === "smanim",
-                    folder: src.mainSource.file.parent.fsName.replace(/\\/g, "/"),
+                    name: stem, parsed: parsed, smAnim: lower(parsed.task) === "smanim",
+                    folder: folder,
                     offset: layer.startTime, inP: layer.inPoint, outP: layer.outPoint,
                     ok: plainTiming(layer) && Math.abs(src.frameRate - comp.frameRate) < 0.001
                 };
@@ -605,7 +663,7 @@
         var fps = comp.frameRate;
         var tif = findTiff(comp, 2);
         if (tif && tif.ok) {
-            var have = tifFrames(FS.listNames(tif.folder), stemOf(tif.name));
+            var have = tifFrames(FS.listNames(tif.folder), tif.name);
             if (have.length) {
                 var base = have[0] - Math.round(tif.offset * fps);
                 var first = base + Math.round(Math.max(tif.inP, 0) * fps);
@@ -613,30 +671,32 @@
                 return {
                     base: base, have: have,
                     start: Math.max(first, have[0]), end: Math.min(last, have[have.length - 1]),
-                    note: "Numbered like " + stemOf(tif.name) + "  (" + have[0] + "-" +
-                        have[have.length - 1] + ", " + have.length + " frames)"
+                    stem: tif.name, note: ""
                 };
             }
         }
         var off = frameOffset(comp);
         var start = off + Math.round(comp.workAreaStart * fps);
         return {
-            base: off, have: [],
+            base: off, have: [], stem: "",
             start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,
-            note: !tif ? "No smAnim TIFF in this comp: comp frame numbers, work area range." :
-                (tif.ok ? "The TIFF folder could not be read: comp frame numbers, work area range." :
-                 "The TIFF layer is stretched, time-remapped or at another frame rate: " +
-                 "comp frame numbers, work area range.")
+            note: !tif ? "no smAnim TIFF in this comp, so the comp's own frame numbers and work area" :
+                (tif.ok ? "the TIFF folder could not be read, so the comp's own frame numbers and work area" :
+                 "the TIFF layer is stretched, time-remapped or at another frame rate, so the comp's " +
+                 "own frame numbers and work area")
         };
     }
 
     function guessLayer(comp) {
         /* {layer, from} */
         var tif = findTiff(comp, 2);
-        if (tif) { return { layer: cleanLayer(tif.parsed.layer), from: "From TIFF: " + tif.name }; }
+        if (tif) {
+            return { layer: cleanLayer(tif.parsed.layer), stem: tif.name,
+                     folder: tif.folder, from: "tif" };
+        }
         var parsed = parseLayerName(comp.name);
-        if (parsed) { return { layer: cleanLayer(parsed.layer), from: "From the comp name" }; }
-        return { layer: "", from: "No TIFF sequence or pipeline comp name found, type it in" };
+        if (parsed) { return { layer: cleanLayer(parsed.layer), from: "comp" }; }
+        return { layer: "", from: "" };
     }
 
     function frameOffset(comp) {
@@ -981,9 +1041,6 @@
         var bOpen = flatButton(r2, "Open Folder", 110);
         bOpen.helpTip = "Open this shot and task's publish media folder in File Explorer\n" +
             "(or the closest folder above it, if it is not made yet).";
-        var taskNote = s2.add("statictext", undefined, "", { multiline: true });
-        taskNote.preferredSize = [560, 32];
-        styleText(taskNote, C_ACCENT, 11, false);
 
         // ── 3. Name
         var s3 = section(win, "3  Name");
@@ -997,12 +1054,27 @@
         label(r3, "Version  v");
         var versionText = r3.add("edittext", undefined, "001");
         versionText.characters = 5;
-        var layerFrom = label(s3, "");
-        layerFrom.characters = 70;
-        styleText(layerFrom, C_DIM, 11, false);
-        var namePreview = label(s3, "");
+        var taskNote = s3.add("statictext", undefined, "", { multiline: true });
+        taskNote.preferredSize = [640, 32];
+        styleText(taskNote, C_ACCENT, 11, false);
+        var r3b = row(s3);
+        var srcLabel = label(r3b, "Source TIFFs", 90);
+        styleText(srcLabel, C_DIM, 11, false);
+        var srcValue = label(r3b, "");
+        srcValue.characters = 70;
+        styleText(srcValue, C_WHITE, 11, false);
+        var r3c = row(s3);
+        var nameLabel = label(r3c, "Publish as", 90);
+        styleText(nameLabel, C_DIM, 11, false);
+        var namePreview = label(r3c, "");
         namePreview.characters = 70;
-        styleText(namePreview, C_WHITE, 12, true);
+        styleText(namePreview, C_GOOD, 13, true);
+        var r3d = row(s3);
+        var proxyLabel = label(r3d, "Proxy as", 90);
+        styleText(proxyLabel, C_DIM, 11, false);
+        var proxyPreview = label(r3d, "");
+        proxyPreview.characters = 70;
+        styleText(proxyPreview, C_DIM, 11, false);
 
         // ── 4. Frames
         var s4 = section(win, "4  Frames");
@@ -1013,62 +1085,59 @@
         label(r4, "End");
         var endText = r4.add("edittext", undefined, "0");
         endText.characters = 6;
-        label(r4, "   Frame rate");
+        var framesOverride = r4.add("checkbox", undefined, "Override frames");
+        framesOverride.helpTip = "Type your own Start and End. They are still numbered like the source TIFFs.";
+        label(r4, "      Frame rate", 90);
         var fpsText = r4.add("edittext", undefined, "12");
         fpsText.characters = 6;
         fpsText.enabled = false;
         var fpsOverride = r4.add("checkbox", undefined, "Override");
         startText.enabled = endText.enabled = false;
-        var framesOverride = r4.add("checkbox", undefined, "Override frames");
-        framesOverride.helpTip = "Type your own Start and End. They are still numbered like the TIFF.";
-        var framesNote = label(s4, "");
-        framesNote.characters = 80;
-        styleText(framesNote, C_DIM, 11, false);
         var framesCheck = label(s4, "");
-        framesCheck.characters = 80;
+        framesCheck.characters = 90;
+        var framesNote = label(s4, "");
+        framesNote.characters = 90;
+        styleText(framesNote, C_DIM, 11, false);
 
         // ── 5. Outputs
         var s5 = section(win, "5  Outputs");
-        var r5a = row(s5);
-        var doExr = r5a.add("checkbox", undefined, "EXR");
-        doExr.value = true;
-        doExr.preferredSize.width = 110;
-        var exrSize = label(r5a, "");
-        exrSize.characters = 22;
-        styleText(exrSize, C_WHITE, 11, true);
-        var exrInfo = label(r5a, "OpenEXR RGB + Alpha float, zip  ·  ACEScg");
-        styleText(exrInfo, C_DIM, 11, false);
-        var exrPath = label(s5, "");
-        exrPath.characters = 80;
-        styleText(exrPath, C_DIM, 10, false);
-        var r5b = row(s5);
-        var doMp4 = r5b.add("checkbox", undefined, "MP4 preview");
-        doMp4.value = true;
-        doMp4.preferredSize.width = 110;
-        var mp4ScaleList = r5b.add("dropdownlist", undefined, ["1/2 res", "1/4 res"]);
-        mp4ScaleList.selection = 0;
-        var mp4Size = label(r5b, "");
-        mp4Size.characters = 12;
-        styleText(mp4Size, C_WHITE, 11, true);
-        var mp4Info = label(r5b, "H.264 on a " + CHECKER_SIZE + " px checkerboard  ·  sRGB");
-        styleText(mp4Info, C_DIM, 11, false);
-        var mp4Path = label(s5, "");
-        mp4Path.characters = 80;
-        styleText(mp4Path, C_DIM, 10, false);
-        var r5c = row(s5);
-        var doPng = r5c.add("checkbox", undefined, "Proxy PNG");
-        doPng.value = true;
-        doPng.preferredSize.width = 110;
-        var scaleList = r5c.add("dropdownlist", undefined, ["1/4 res", "1/8 res"]);
-        scaleList.selection = 0;
-        var pngSize = label(r5c, "");
-        pngSize.characters = 12;
-        styleText(pngSize, C_WHITE, 11, true);
-        var pngInfo = label(r5c, "PNG RGB + Alpha  ·  ACEScg");
-        styleText(pngInfo, C_DIM, 11, false);
-        var pngPath = label(s5, "");
-        pngPath.characters = 80;
-        styleText(pngPath, C_DIM, 10, false);
+        var mediaLine = label(s5, "");
+        mediaLine.characters = 100;
+        styleText(mediaLine, C_DIM, 11, false);
+
+        function outputRow(parent, title, scaleChoice, info) {
+            var r = row(parent);
+            var tick = r.add("checkbox", undefined, title);
+            tick.value = true;
+            tick.preferredSize.width = 110;
+            var dd = null;
+            if (scaleChoice) {
+                dd = r.add("dropdownlist", undefined, SCALE_LABELS);
+                dd.preferredSize.width = 80;
+            } else {
+                var full = label(r, "1/1 res");
+                full.preferredSize.width = 80;
+                styleText(full, C_DIM, 11, false);
+            }
+            var size = label(r, "");
+            size.characters = 12;
+            styleText(size, C_WHITE, 11, true);
+            var inf = label(r, info);
+            styleText(inf, C_DIM, 11, false);
+            var path = label(parent, "");
+            path.characters = 100;
+            styleText(path, C_DIM, 10, false);
+            return { tick: tick, scale: dd, size: size, path: path };
+        }
+
+        var oExr = outputRow(s5, "EXR", false, "OpenEXR RGB + Alpha float, zip  ·  ACEScg");
+        var oMp4 = outputRow(s5, "MP4 preview", true,
+            "H.264 on a " + CHECKER_SIZE + " px checkerboard  ·  sRGB");
+        var oPng = outputRow(s5, "Proxy PNG", true, "PNG RGB + Alpha  ·  ACEScg");
+        oMp4.scale.selection = 1;
+        oPng.scale.selection = 2;
+        var doExr = oExr.tick, doMp4 = oMp4.tick, doPng = oPng.tick;
+        var mp4ScaleList = oMp4.scale, scaleList = oPng.scale;
 
         // ── Footer
         var footer = row(win);
@@ -1095,21 +1164,26 @@
                      sh: ddValue(shList), task: ddValue(taskList) };
         }
 
-        function proxyScale() { return PROXY_SCALES[scaleList.selection ? scaleList.selection.index : 0]; }
+        function proxyScale() { return SCALES[scaleList.selection ? scaleList.selection.index : 2]; }
 
-        function mp4Scale() { return MP4_SCALES[mp4ScaleList.selection ? mp4ScaleList.selection.index : 0]; }
+        function mp4Scale() { return SCALES[mp4ScaleList.selection ? mp4ScaleList.selection.index : 1]; }
+
+        function scaleIndex(scale) {
+            for (var i = 0; i < SCALES.length; i++) { if (SCALES[i] === scale) { return i; } }
+            return 0;
+        }
 
         function sizeText(scale, even) {
             var c = comp();
             if (!c) { return ""; }
             var wh = outputSize(c.width, c.height, scale, even);
-            return wh[0] + " x " + wh[1] + (scale === 1 ? "  (" + SCALE_NAMES[1] + ")" : "");
+            return wh[0] + " x " + wh[1];
         }
 
         function updateSizes() {
-            exrSize.text = sizeText(1, false);
-            mp4Size.text = sizeText(mp4Scale(), true);
-            pngSize.text = sizeText(proxyScale(), false);
+            oExr.size.text = sizeText(1, false);
+            oMp4.size.text = sizeText(mp4Scale(), true);
+            oPng.size.text = sizeText(proxyScale(), false);
         }
 
         function kinds() {
@@ -1147,10 +1221,24 @@
                 endText.text = String(st.frames.end);
             }
             if (!fpsOverride.value) { fpsText.text = String(fps); }
+            // Closest to 1080p for the MP4 and 720p for the proxy.
+            mp4ScaleList.selection = scaleIndex(closestScale(c.width, c.height, MP4_TARGET));
+            scaleList.selection = scaleIndex(closestScale(c.width, c.height, PROXY_TARGET));
             framesChanged();
             var g = guessLayer(c);
             layerText.text = g.layer;
-            layerFrom.text = g.from;
+            if (g.from === "tif") {
+                srcValue.text = g.stem + ".####.tif   in   " +
+                    g.folder.replace(/^.*\/(rotoKeyIngest|smAnim)\//i, "...\\$1\\").replace(/\//g, "\\");
+                srcValue.helpTip = g.folder.replace(/\//g, "\\");
+                styleText(srcValue, C_WHITE, 11, false);
+            } else {
+                srcValue.text = g.from === "comp" ?
+                    "None in this comp. Layer name taken from the comp name." :
+                    "None in this comp. Type the layer name in.";
+                srcValue.helpTip = "";
+                styleText(srcValue, C_BAD, 11, false);
+            }
             nameChanged(true);
         }
 
@@ -1167,14 +1255,19 @@
             var err = checkInputs(x, layer, variant, versionText.text);
             if (err) {
                 namePreview.text = err;
-                exrPath.text = mp4Path.text = pngPath.text = "";
+                styleText(namePreview, C_BAD, 12, true);
+                proxyPreview.text = mediaLine.text = "";
+                oExr.path.text = oMp4.path.text = oPng.path.text = "";
                 return;
             }
             var p = makePlan(x, layer, variant, parseInt(versionText.text, 10), proxyScale(), mp4Scale());
             namePreview.text = p.name;
-            exrPath.text = "    " + p.exr.file.replace(/\//g, "\\");
-            mp4Path.text = "    " + p.mp4.file.replace(/\//g, "\\");
-            pngPath.text = "    " + p.png.file.replace(/\//g, "\\");
+            styleText(namePreview, C_GOOD, 13, true);
+            proxyPreview.text = p.proxyName;
+            mediaLine.text = "Into   " + p.media.replace(/\//g, "\\") + "\\";
+            oExr.path.text = "        <publish name>\\exr\\<publish name>.[####].exr";
+            oMp4.path.text = "        <publish name>.mp4";
+            oPng.path.text = "        <proxy name>\\png\\<proxy name>.[####].png";
         }
 
         function fillLevel(dd, path, want) {
@@ -1233,18 +1326,24 @@
         function framesChanged() {
             var f = st.frames;
             if (!f) { return; }
-            framesNote.text = f.note + (fpsOverride.value && f.have.length ?
-                "   Frame rate override: numbers will not line up with the TIFF." : "");
-            var prob = frameProblems();
             var a = parseInt(startText.text, 10), b = parseInt(endText.text, 10);
-            if (prob) {
-                framesCheck.text = prob;
-                styleText(framesCheck, C_BAD, 11, true);
+            var prob = frameProblems();
+            if (f.have.length) {
+                var total = isNaN(a) || isNaN(b) ? 0 : b - a + 1;
+                var found = total - (isNaN(a) || isNaN(b) ? 0 : checkFrames(f.have, a, b).length);
+                framesCheck.text = "Expected frame range: " + a + "-" + b + ",  " + found + "/" + total +
+                    " frames  (" + shortStem(f.stem) + ")" + (prob ? "   " + prob : "");
             } else {
-                framesCheck.text = (b - a + 1) + " frames, " + a + "-" + b +
-                    (f.have.length ? ", all there in the TIFF folder." : ".");
-                styleText(framesCheck, C_GOOD, 11, false);
+                framesCheck.text = "Frame range: " + a + "-" + b + ",  " + (b - a + 1) + " frames" +
+                    (prob ? "   " + prob : "");
             }
+            styleText(framesCheck, prob ? C_BAD : C_GOOD, 11, true);
+            var notes = [];
+            if (f.note) { notes.push("Numbered from " + f.note + "."); }
+            if (fpsOverride.value && f.have.length) {
+                notes.push("Frame rate override: the numbers will not line up with the source TIFFs.");
+            }
+            framesNote.text = notes.join("  ");
         }
 
         // ─────────── actions ───────────
@@ -1296,25 +1395,32 @@
 
             st.busy = true;
             var made = [];
+            var step = "starting";
+            log("queue " + plan.name + "  [" + todo.join(", ") + "]  frames " + startText.text + "-" +
+                endText.text + "  AE " + app.version);
             app.beginUndoGroup(PANEL_NAME);
             try {
-                var folder = exportFolder();
-                for (i = 0; i < todo.length; i++) {
-                    var out = plan[todo[i]];
-                    var rc = renderComp(folder, c, out, fps, sp.base);
-                    var item = app.project.renderQueue.items.add(rc);
-                    made.push({ kind: todo[i], comp: rc, item: item, out: out });
-                }
-                // Templates are made on this machine from the presets project
-                // when they are missing, or when the presets project is newer
-                // than the one they were made from.
+                // 1. Templates first. Bringing the presets project in can
+                //    leave earlier render queue items unusable, so it happens
+                //    before anything is made. Made on this machine when they
+                //    are missing, or when the presets project is newer than
+                //    the one they were made from.
+                step = "checking the output templates";
                 var pf = findPresetsFile();
-                var missing = missingTemplates(made[0].item.outputModule(1), todo);
+                var rqs = app.project.renderQueue;
+                var probe = rqs.items.add(c);
+                var missing = missingTemplates(probe.outputModule(1), todo);
+                probe.remove();
                 if (pf && (missing.length || savedStamp() !== presetsStamp(pf))) {
+                    step = "loading the presets project " + pf.fsName;
                     say("Setting up the MNR export presets...");
+                    log(step);
                     loadPresets(pf);
                     saveStamp(presetsStamp(pf));
-                    missing = missingTemplates(made[0].item.outputModule(1), todo);
+                    step = "checking the output templates again";
+                    probe = app.project.renderQueue.items.add(c);
+                    missing = missingTemplates(probe.outputModule(1), todo);
+                    probe.remove();
                 }
                 if (missing.length) {
                     throw new Error("These output templates are missing:\n  " + missing.join("\n  ") +
@@ -1324,17 +1430,32 @@
                         presetsDirs().join("\n").replace(/\//g, "\\") +
                         "\n\nReinstall the AE plugin from MNR Launcher."));
                 }
-                for (i = 0; i < made.length; i++) {
-                    setUpItem(made[i].item, made[i].kind, made[i].out, sp);
+
+                // 2. A render comp and a render queue item per output.
+                step = "making the MNR Exports folder";
+                var folder = exportFolder();
+                for (i = 0; i < todo.length; i++) {
+                    var out = plan[todo[i]];
+                    step = "making the " + todo[i] + " render comp";
+                    var rc = renderComp(folder, c, out, fps, sp.base);
+                    made.push({ kind: todo[i], comp: rc, out: out });
+                    step = "adding the " + todo[i] + " render to the queue";
+                    var item = app.project.renderQueue.items.add(rc);
+                    step = "setting up the " + todo[i] + " render";
+                    setUpItem(item, todo[i], out, sp);
+                    log("queued " + todo[i] + " -> " + out.file);
                 }
             } catch (e) {
+                var where = "Failed while " + step + (e.line ? " (line " + e.line + ")" : "");
+                log("ERROR " + where + ": " + e.toString());
                 for (i = 0; i < made.length; i++) {
                     try { made[i].comp.remove(); } catch (e2) {}
                 }
                 app.endUndoGroup();
                 st.busy = false;
                 say("Nothing queued.", false);
-                alert(String(e.message || e), PANEL_NAME);
+                alert(String(e.message || e) + "\n\n" + where +
+                      "\n\nLog: %APPDATA%\\MNR_Launcher\\ae_exporter.log", PANEL_NAME);
                 return;
             }
             app.endUndoGroup();
