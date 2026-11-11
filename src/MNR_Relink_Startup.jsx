@@ -77,17 +77,29 @@
         return { name: t.join("_"), proxy: proxy };
     }
 
-    function fixFileName(file, oldFolder, newFolder) {
-        /* The file named after its folder, with the folder's new name. */
+    function fixFileName(file, oldFolder, newFolder, proxy) {
+        /* A file with the same layer and version as its folder gets the
+           folder's new project / sequence / shot / task tokens; its own
+           layer-variant part is kept (kopaka01-main-ACEScg-16bf stays), with
+           main -> proxy for a renamed proxy. */
         var m = String(file).match(/^(.+?_v\d+)(.*)$/i);
         if (!m) { return file; }
         var ft = m[1].split("_");
         var ot = String(oldFolder).split("_");
         if (ft.length !== 6 || ot.length < 6) { return file; }
-        // same layer and version as the folder (the variant may be main for a proxy)
         var fLayer = lower(ft[4].split("-")[0]), oLayer = lower(ot[4].split("-")[0]);
         if (fLayer !== oLayer || lower(ft[5]) !== lower(ot[5])) { return file; }
-        return newFolder + m[2];
+        var nt = String(newFolder).split("_");
+        var seg = ft[4];
+        if (proxy) {
+            var dash = seg.indexOf("-");
+            if (dash > 0) {
+                var parts = seg.substr(dash + 1).split("-");
+                parts[0] = proxyVariant(parts[0]);
+                seg = seg.substr(0, dash) + "-" + parts.join("-");
+            }
+        }
+        return [nt[0], nt[1], nt[2], nt[3], seg, ft[5]].join("_") + m[2];
     }
 
     function newPlaces(path) {
@@ -108,7 +120,7 @@
                 var slash = rest.lastIndexOf("/");
                 var sub = slash >= 0 ? rest.substr(0, slash + 1) : "";
                 var file = slash >= 0 ? rest.substr(slash + 1) : rest;
-                var newFile = fixFileName(file, folder, fixed.name);
+                var newFile = fixFileName(file, folder, fixed.name, fixed.proxy);
                 if (!sub && /\.exr$/i.test(file)) { sub = "exr/"; }
                 if (!sub && fixed.proxy && /\.png$/i.test(file)) { sub = "png/"; }
                 var base = shotDir + task + "/export/publish/media/";
