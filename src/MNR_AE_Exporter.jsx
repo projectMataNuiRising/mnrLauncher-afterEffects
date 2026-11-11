@@ -4,10 +4,10 @@
     // ── Version stamp ──────────────────────────────────────────────
     // Written by the "Stamp plugin version" GitHub action on every push
     // to main, same numbers as the MNR Scene Manager. Keep at the top.
-    var PLUGIN_VERSION = "0.3.40";
+    var PLUGIN_VERSION = "0.3.42";
     var PLUGIN_CHANNEL = "main";
-    var PLUGIN_BUILT = "2026-11-11 06:53 UTC";
-    var PLUGIN_COMMIT = "acca21f";
+    var PLUGIN_BUILT = "2026-11-11 07:02 UTC";
+    var PLUGIN_COMMIT = "4793573";
     // ───────────────────────────────────────────────────────────────
 
     /*
