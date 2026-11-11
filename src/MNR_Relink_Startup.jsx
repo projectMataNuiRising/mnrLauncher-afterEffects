@@ -28,8 +28,9 @@
     taken as a renumber and shown as one (0001-0081 -> 1001-1081). A
     different number of frames is shown as a warning and left unticked.
 
-    So older After Effects projects show that footage as missing. Whenever
-    a project is opened (checked every few seconds), every missing file
+    So older After Effects projects show that footage as missing. When a
+    project is opened (at launch, or from the MNR Scene Manager), every
+    missing file
     under P:\01-projects is looked for where those fixes put it. When any
     are found, a window lists them (was / now) and asks before replacing
     anything. Replacing keeps the footage's frame rate and alpha
@@ -402,20 +403,24 @@
         }
     };
 
-    // Checks each project once, when it is opened (a different project file).
-    $.global.mnrRelinkPoll = function () {
+    // When it runs: once shortly after After Effects starts (if it was
+    // started with a project), and from the MNR Scene Manager each time it
+    // opens a project. No repeating check: After Effects refuses to run any
+    // script while it renders, and logs an error each time one is due.
+    $.global.mnrRelinkOnOpen = function () {
         try {
             var path = app.project && app.project.file ? app.project.file.fsName : "";
-            if (path === $.global.mnrRelinkLast) { return; }
+            if (!path || path === $.global.mnrRelinkLast) { return; }
             $.global.mnrRelinkLast = path;
-            if (path) { $.global.mnrRelinkCheck(false); }
+            $.global.mnrRelinkCheck(false);
         } catch (e) {}
     };
 
     try {
-        if ($.global.mnrRelinkTask) { app.cancelTask($.global.mnrRelinkTask); }
+        // An older build left a repeating check running; stop it.
+        if ($.global.mnrRelinkTask) { app.cancelTask($.global.mnrRelinkTask); $.global.mnrRelinkTask = null; }
         $.global.mnrRelinkLast = "";
-        $.global.mnrRelinkTask = app.scheduleTask("try { $.global.mnrRelinkPoll(); } catch (e) {}", POLL_MS, true);
+        app.scheduleTask("try { $.global.mnrRelinkOnOpen(); } catch (e) {}", 4000, false);
     } catch (e) {
         log("could not start: " + e.toString());
     }

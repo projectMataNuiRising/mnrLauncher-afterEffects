@@ -633,9 +633,9 @@
            frame rate, so its frame numbers cannot be worked out. */
         var found = null;
         seen = seen || {};
-        // After Effects counts layer times from the comp's starting frame
-        // number (Start Timecode); everything here is from the comp's start.
-        var d = comp.displayStartTime || 0;
+        // Layer times count from the comp's start (0), whatever its Start
+        // Timecode; only the render queue counts from the start frame.
+        var d = 0;
         for (var i = 1; i <= comp.numLayers; i++) {
             var layer, src;
             try { layer = comp.layer(i); src = layer.source; } catch (e) { src = null; }
@@ -702,7 +702,7 @@
             }
         }
         var off = frameOffset(comp);
-        var start = off + Math.round((comp.workAreaStart - comp.displayStartTime) * fps);
+        var start = off + Math.round(comp.workAreaStart * fps);
         return {
             base: off, have: [], stem: "",
             start: start, end: start + Math.max(1, Math.round(comp.workAreaDuration * fps)) - 1,

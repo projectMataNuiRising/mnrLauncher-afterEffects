@@ -1104,6 +1104,9 @@
             if (opened) {
                 say("Opened " + basename(rowPath(row)), true);
                 fillFiles(rowPath(row));
+                // Missing footage that the pipeline moved or renamed: found
+                // and offered by MNR_Relink_Startup.jsx (asks first).
+                try { if ($.global.mnrRelinkOnOpen) { $.global.mnrRelinkOnOpen(); } } catch (e) {}
             }
         }
 
