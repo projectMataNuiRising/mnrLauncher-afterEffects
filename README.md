@@ -91,6 +91,15 @@ present. The pipeline check uses a plain folder existence test and
 falls back to a "running standalone" state, so the panel still opens
 and works on a machine with no pCloud mounted.
 
+## MNR Toolbar
+
+`src/MNR_Toolbar.jsx` is a shelf of icon buttons, like Maya's and
+Houdini's: Scene Manager, AE Exporter, Relink (look for moved footage
+now) and Project Settings (set the MNR settings on the open project).
+Open it from Window > MNR_Toolbar.jsx and dock it along the top or side;
+it stays with the workspace. Docked taller than wide, it turns into a
+column. The icons are drawn in code, so there are no image files.
+
 ## MNR Relink
 
 `src/MNR_Relink_Startup.jsx` (in `Scripts\Startup`) checks each project
@@ -152,15 +161,16 @@ Normally handled by MNR Launcher, under Connect Software > After
 Effects. It downloads the panel straight from this repository, so
 whatever is on `main` is what gets installed.
 
-To install by hand, copy `src/MNR_Scene_Manager.jsx` and
-`src/MNR_AE_Exporter.jsx` into the ScriptUI Panels path above and
+To install by hand, copy `src/MNR_Scene_Manager.jsx`,
+`src/MNR_AE_Exporter.jsx` and `src/MNR_Toolbar.jsx` into the ScriptUI Panels path above and
 restart After Effects. They then appear in the `Window` menu.
 (`MNR_Scene_Manager.jsx` used to be called `MNR_Launcher_Panel.jsx`.)
 
 ## Layout
 
 ```
-src/     the panels (MNR_Scene_Manager.jsx, MNR_AE_Exporter.jsx) and
+src/     the panels (MNR_Scene_Manager.jsx, MNR_AE_Exporter.jsx,
+         MNR_Toolbar.jsx) and
          the Scripts\Startup files, all installed by MNR Launcher
 tools/   one-time admin scripts, not installed
 build/   plugin.json (the install manifest MNR Launcher reads) and
