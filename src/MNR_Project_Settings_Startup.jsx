@@ -25,6 +25,8 @@
         was started with a project, existing projects are never changed).
       - When the MNR Scene Manager makes a New project, through
         $.global.mnrApplyProjectSettings(), before the first save.
+      - When the MNR AE Importer imports into a project whose settings
+        differ ($.global.mnrCheckProjectSettings() lists them).
 
     Some of these have no scripting access in every After Effects
     version (Default Base and Display Color Space have none at all).
@@ -68,6 +70,16 @@
     // Sets one setting and reads it back. check(value) says whether the
     // read-back value is right, defaults to an exact match.
     function setOne(p, report, label, name, value, check) {
+        if (report.dry) {
+            // Check only: list it when it differs (ones scripts cannot
+            // read are left out).
+            if (!has(p, name)) { return true; }
+            var cur;
+            try { cur = p[name]; } catch (e0) { return true; }
+            var same = check ? check(cur) : (cur === value);
+            if (!same) { report.differ.push(label.replace(/:.*$/, "")); }
+            return same;
+        }
         if (!has(p, name)) {
             report.missed.push(label + " (no scripting access in this version)");
             return false;
@@ -108,8 +120,8 @@
         return null;
     }
 
-    function applyTo(p) {
-        var report = { done: [], missed: [] };
+    function applyTo(p, given) {
+        var report = given || { done: [], missed: [] };
         if (!p) { report.missed.push("no project open"); return report; }
 
         // ── Time Display Style
@@ -161,6 +173,15 @@
 
         return report;
     }
+
+    // Used by the MNR AE Importer: the names of the settings that are not
+    // MNR ([] when they all are). Changes nothing.
+    $.global.mnrCheckProjectSettings = function () {
+        var report = { done: [], missed: [], differ: [], dry: true };
+        if (!app.project) { return []; }
+        applyTo(app.project, report);
+        return report.differ;
+    };
 
     // Used by the MNR Scene Manager's New, and at launch below.
     // Returns { done: [...], missed: [...] }.

@@ -38,6 +38,8 @@
                  - Interpret Footage colour set to ACEScg when the TIFF is
                    scene linear (16 / 32-bit float, read from the file),
                    else a warning.
+                 - first, the MNR project settings (as MNR_Project_Settings_
+                   Startup.jsx sets them) when the project's differ.
                  - a comp named like the folder, the TIFF's size and
                    length, numbered from its first frame (1001...), so the
                    MNR AE Exporter numbers renders the same.
@@ -315,7 +317,7 @@
     }
 
     function readTiff(r) {
-        /* {bits, float, samples, description, software, icc} from a TIFF
+        /* {bits, isFloat, samples, description, software, icc} from a TIFF
            header, or null. */
         var head = r.bytes(0, 8);
         if (head.length < 8) { return null; }
@@ -336,12 +338,12 @@
             if (type === 4) { return u32(data, 0, le); }
             return data[0];
         }
-        var out = { bits: 0, float: false, samples: 1, description: "", software: "", icc: "" };
+        var out = { bits: 0, isFloat: false, samples: 1, description: "", software: "", icc: "" };
         for (var k = 0; k < n; k++) {
             var i = k * 12, tag = u16(e, i, le);
             if (tag === 258) { out.bits = value(i); }
             else if (tag === 277) { out.samples = value(i); }
-            else if (tag === 339) { out.float = value(i) === 3; }
+            else if (tag === 339) { out.isFloat = value(i) === 3; }
             else if (tag === 270) { out.description = value(i); }
             else if (tag === 305) { out.software = value(i); }
             else if (tag === 34675) {
@@ -363,17 +365,17 @@
         /* {text, aces, warn}: what the TIFF says it is, and whether it gets
            ACEScg. Scene linear = float; a named colour space wins. */
         if (!info) { return { text: "could not read the TIFF", aces: false, warn: "could not read the TIFF header" }; }
-        var depth = info.bits + "-bit " + (info.float ? "float" : "int");
+        var depth = info.bits + "-bit " + (info.isFloat ? "float" : "int");
         var named = lower(info.description + " " + info.software + " " + info.icc);
         if (/acescg|aces ?- ?cg|\bap1\b/.test(named)) { return { text: depth + ", ACEScg", aces: true, warn: "" }; }
         if (/aces2065|\bap0\b/.test(named)) {
             return { text: depth + ", ACES2065-1", aces: false, warn: "says ACES2065-1, not ACEScg" };
         }
-        if (/srgb|rec\.? ?709|display p3|adobe rgb/.test(named) && !info.float) {
+        if (/srgb|rec\.? ?709|display p3|adobe rgb/.test(named) && !info.isFloat) {
             return { text: depth + ", display referred (" + (info.icc || "named") + ")", aces: false,
                      warn: "display referred, not scene linear" };
         }
-        if (info.float) { return { text: depth + ", scene linear", aces: true, warn: "" }; }
+        if (info.isFloat) { return { text: depth + ", scene linear", aces: true, warn: "" }; }
         return { text: depth, aces: false, warn: "not float, so likely not scene linear" };
     }
 
@@ -651,6 +653,13 @@
         return { item: ref, imported: imported };
     }
 
+    function settingsProblems() {
+        /* Project settings that are not MNR ([] when all are), or null when
+           MNR_Project_Settings_Startup.jsx is not loaded. */
+        if (typeof $.global.mnrCheckProjectSettings !== "function") { return null; }
+        try { return $.global.mnrCheckProjectSettings(); } catch (e) { return null; }
+    }
+
     function setStartFrame(c, first, fps) {
         /* The comp's first frame number = first (1001...). */
         var done = false;
@@ -896,6 +905,8 @@
         optAces.value = true;
         optAces.helpTip = "Copies Interpret Footage > Color from the \"MNR ACEScg\" footage in\n" +
             "MNR_Import_Presets_<year>_v###.aep (scripts cannot set colour directly).";
+        var settingsNote = label(s3, "");
+        settingsNote.characters = 70;
         var acesNote = label(s3, "");
         acesNote.characters = 70;
         var binNote = label(s3, "");
@@ -970,6 +981,11 @@
                 styleText(w, already ? C_DIM : C_WARN, 11, false);
                 st.rows.push(cb);
             }
+            var bad = settingsProblems();
+            settingsNote.text = bad === null ? "MNR_Project_Settings_Startup.jsx did not load, project settings are not checked." :
+                (bad.length ? "Project settings not MNR (" + bad.join(", ") + "), they are set on Import." :
+                 "Project settings are MNR (ACES 1.3 CG, ACEScg, 32 bpc, timecode).");
+            styleText(settingsNote, bad && !bad.length ? C_DIM : C_WARN, 11, false);
             var presets = findPresetsFile();
             st.presets = presets;
             acesNote.text = presets ? "ACEScg from \"MNR ACEScg\" in " + File.decode(presets.name) :
@@ -1010,6 +1026,16 @@
             }
             st.busy = true;
             var notes = [], made = [], step = "starting";
+            // MNR project settings first: the colour engine decides how the
+            // footage is read.
+            var bad = settingsProblems();
+            if (bad && bad.length) {
+                var rep = $.global.mnrApplyProjectSettings("importer");
+                var still = settingsProblems() || [];
+                notes.push("Project settings set to MNR: " + bad.join(", ") +
+                    (still.length ? "  (could not set: " + still.join(", ") + ")" : ""));
+                log("project settings were " + bad.join(", ") + "; set " + rep.done.length);
+            }
             log("import " + todo.length + " from " + mediaDir(ctx(), ddValue(taskList)) + "  AE " + app.version);
             app.beginUndoGroup(PANEL_NAME);
             try {

@@ -128,7 +128,8 @@ Scene Manager saves it); "From" is the task they are published from
 the frame rate of `<name>.mp4` and the TIFF's bit depth and colour, read
 from the file headers. Ones already in the project are not ticked.
 
-Import brings in each ticked sequence at the MP4's frame rate (12 fps
+Import first sets the MNR project settings when the project's differ
+(the panel shows which), then brings in each ticked sequence at the MP4's frame rate (12 fps
 when there is no MP4; anything but 12 or 24 is warned about first), and
 makes a comp named like the folder, numbered from the first TIFF frame
 (1001...) so the Exporter numbers renders the same. Bins: `01_comps`,
