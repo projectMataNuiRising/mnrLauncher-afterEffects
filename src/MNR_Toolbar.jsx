@@ -22,7 +22,12 @@
                               project (MNR_Project_Settings_Startup.jsx)
 
         Panels open through the Window menu (the same as picking them
-        there), else as their own window. Hover a button for its name.
+        there), else as their own window. Hover a button for what it does.
+
+        MNR_Toolbar_Startup.jsx (in Scripts\Startup) opens it when After
+        Effects starts, if the workspace did not already. Where it docks
+        cannot be set by a script: dock it once and After Effects keeps it
+        there in the workspace.
 
         The icons are drawn in code (gradients as thin strips, as ScriptUI
         has no gradient brush), so there are no image files to install. The bar turns
@@ -30,7 +35,11 @@
     */
 
     var PANEL_NAME = "MNR Toolbar";
-    var BUTTON = 36;            // button size in pixels
+    var ICON = 38;              // icon size in pixels
+    var TILE_H = 62;            // button height: icon + name
+    var TILE_MIN_W = 64;        // narrowest button
+    var C_NAME = [0.78, 0.78, 0.78, 1];
+    var C_NAME_HOVER = [1, 1, 1, 1];
 
     // After Effects greys and blue. Pairs are [top, bottom] of a gradient.
     var BG = [[0.21, 0.21, 0.21], [0.16, 0.16, 0.16]];
@@ -202,9 +211,16 @@
         }
     };
 
-    function iconButton(parent, icon, tip, onClick) {
+    function nameFont(g) {
+        try { return ScriptUI.newFont(g.font.name, ScriptUI.FontStyle.REGULAR, 11); } catch (e) { return g.font; }
+    }
+
+    function iconButton(parent, icon, name, tip, onClick) {
+        /* A tile: the icon with the tool's name under it. */
         var b = parent.add("button", undefined, "");
-        b.preferredSize = [BUTTON, BUTTON];
+        var textW = name.length * 6;
+        try { textW = b.graphics.measureString(name, nameFont(b.graphics))[0]; } catch (e) {}
+        b.preferredSize = [Math.max(TILE_MIN_W, Math.ceil(textW) + 14), TILE_H];
         b.helpTip = tip;
         b.onDraw = function (state) {
             var g = this.graphics;
@@ -214,12 +230,19 @@
             var lift = over || down ? 1.12 : 1;
             // Rounded tile, lighter at the top.
             var tile = new Painter(g, 1, 0, 0, 1);
-            tile.grad(0, h, roundSpan(0, w, 0, h, 4), bgCols);
-            var k = (Math.min(w, h) - 8) / 24;
-            var p = new Painter(g, k, (w - 24 * k) / 2, (h - 24 * k) / 2, lift);
+            tile.grad(0, h, roundSpan(0, w, 0, h, 5), bgCols);
+            var k = ICON / 24;
+            var p = new Painter(g, k, (w - ICON) / 2, 3, lift);
             // Colour behind the icon at its middle, for cut-out edges.
-            var mid = mix(bgCols[0], bgCols[1], 0.6, 1);
+            var mid = mix(bgCols[0], bgCols[1], 0.35, 1);
             try { ICONS[icon](p, mid); } catch (e) {}
+            // The name, under the icon.
+            try {
+                var font = nameFont(g);
+                var size = g.measureString(name, font);
+                var pen = g.newPen(g.PenType.SOLID_COLOR, over || down ? C_NAME_HOVER : C_NAME, 1);
+                g.drawString(name, pen, (w - size[0]) / 2, h - size[1] - 5, font);
+            } catch (e2) {}
         };
         b.onClick = function () {
             try { onClick(); } catch (e) { alert(String(e.message || e), PANEL_NAME); }
@@ -296,16 +319,21 @@
         bar.margins = 0;
         bar.alignChildren = ["left", "center"];
 
-        iconButton(bar, "sceneManager", "MNR Scene Manager\nOpen, save and version up shot files",
+        iconButton(bar, "sceneManager", "Scene Manager", "MNR Scene Manager\nOpen, save and version up shot files",
             function () { openPanel("MNR_Scene_Manager.jsx"); });
-        iconButton(bar, "importer", "MNR AE Importer\nBring in the shot's TIFF sequences, with comps",
+        iconButton(bar, "importer", "Importer", "MNR AE Importer\nBring in the shot's TIFF sequences, with comps",
             function () { openPanel("MNR_AE_Importer.jsx"); });
-        iconButton(bar, "exporter", "MNR AE Exporter\nPublish renders: EXR, MP4 preview, proxy PNG",
+        iconButton(bar, "exporter", "Exporter", "MNR AE Exporter\nPublish renders: EXR, MP4 preview, proxy PNG",
             function () { openPanel("MNR_AE_Exporter.jsx"); });
-        iconButton(bar, "relink", "Find Missing Footage\nRelink footage that was moved or renamed",
+        iconButton(bar, "relink", "Missing Footage", "Find Missing Footage\nRelink footage that was moved or renamed",
             relink);
-        iconButton(bar, "settings", "Project Settings\nSet the MNR project settings on this project",
+        iconButton(bar, "settings", "Project Settings", "Project Settings\nSet the MNR project settings on this project",
             projectSettings);
+
+        // Every tile as wide as the widest name.
+        var widest = 0, i;
+        for (i = 0; i < bar.children.length; i++) { widest = Math.max(widest, bar.children[i].preferredSize[0]); }
+        for (i = 0; i < bar.children.length; i++) { bar.children[i].preferredSize = [widest, TILE_H]; }
 
         function fit() {
             // A column when docked taller than wide, else a row.
@@ -335,6 +363,8 @@
     }
 
     var built = buildUI(thisObj);
+    // Lets MNR_Toolbar_Startup.jsx know it is already open.
+    if (built instanceof Panel) { $.global.mnrToolbarDocked = true; }
     if (built instanceof Window) {
         $.global.mnrToolbarWindow = built;
         built.onClose = function () {

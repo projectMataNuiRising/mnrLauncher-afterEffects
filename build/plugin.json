@@ -57,6 +57,11 @@
       "source": "src/MNR_Relink_Startup.jsx",
       "install_as": "MNR_Relink_Startup.jsx",
       "folder": "Scripts/Startup"
+    },
+    {
+      "source": "src/MNR_Toolbar_Startup.jsx",
+      "install_as": "MNR_Toolbar_Startup.jsx",
+      "folder": "Scripts/Startup"
     }
   ],
   "notes": "MNR_Scene_Manager.jsx (open, new, save as, rename pipeline .aep work files; was MNR_Launcher_Panel.jsx) and MNR_AE_Importer.jsx (brings in a shot's TIFF sequences with comps), MNR_AE_Exporter.jsx (publish renders: EXR, MP4 preview, PNG proxy) and MNR_Toolbar.jsx (a dockable shelf of icon buttons for the MNR tools) are the panels MNR Launcher installs, plus the two Scripts/Startup files. MNR_Feature_Catalog.jsx is a showroom of ScriptUI widgets, not shipped to artists. tools/ holds one-time admin scripts, not installed."

@@ -101,6 +101,11 @@ it stays with the workspace. Docked taller than wide, it turns into a
 column. The icons are drawn in code (gradients as thin strips), so
 there are no image files.
 
+`src/MNR_Toolbar_Startup.jsx` (in `Scripts\Startup`) opens the toolbar
+when After Effects starts, unless the workspace already did. Scripts
+cannot choose where a panel docks, so dock it once and After Effects
+keeps it there.
+
 ## MNR Relink
 
 `src/MNR_Relink_Startup.jsx` (in `Scripts\Startup`) checks each project
