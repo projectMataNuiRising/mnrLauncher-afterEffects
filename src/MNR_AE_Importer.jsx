@@ -665,7 +665,15 @@
         /* A fresh copy of the "MNR ACEScg" footage item from the presets
            project: {item, imported} (imported: the folder to remove), or
            null. */
-        var imported = app.project.importFile(new ImportOptions(presets));
+        // Quietly: a missing reference TIFF would otherwise pop up a
+        // missing footage warning (the interpretation is kept either way).
+        var imported;
+        try { app.beginSuppressDialogs(); } catch (e0) {}
+        try {
+            imported = app.project.importFile(new ImportOptions(presets));
+        } finally {
+            try { app.endSuppressDialogs(false); } catch (e1) {}
+        }
         var ref = findIn(imported, function (it) { return it instanceof FootageItem && REFERENCE_NAME.test(it.name); });
         if (!ref) {
             try { imported.remove(); } catch (e) {}
