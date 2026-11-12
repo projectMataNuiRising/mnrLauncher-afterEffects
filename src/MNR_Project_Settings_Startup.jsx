@@ -11,7 +11,13 @@
 
       Color
         Color Engine:            OCIO color managed
-        OCIO Configuration:      ACES 1.3 CG v1.0
+        OCIO Configuration:      ACES 1.3 CG v1.0 (built in; where this
+                                 After Effects does not have it, the
+                                 same config as a custom OCIO file:
+                                 cg-config-v1.0.0_aces-v1.3_ocio-v2.1.ocio,
+                                 installed next to the MNR panels, else
+                                 P:\02-pipeline\colorManagement\
+                                 aces_1.3_CG_v1.0\)
         Bit Depth:               32 bits per channel (float)
         3D LUT Interpolation:    Tetrahedral
         Working Color Space:     scene_linear: ACEScg
@@ -40,6 +46,8 @@
 (function () {
 
     var APPLY_DELAY_MS = 2000;
+    var OCIO_FILE = "cg-config-v1.0.0_aces-v1.3_ocio-v2.1.ocio";
+    var OCIO_PIPELINE_DIR = "P:/02-pipeline/colorManagement/aces_1.3_CG_v1.0";
 
     var WANT = {
         ocioConfig: "ACES 1.3 CG v1.0",
@@ -101,6 +109,61 @@
         return ok;
     }
 
+    function isAces13(v) {
+        // The built-in name, or the custom cg-config file for ACES 1.3.
+        var s = lower(v || "");
+        return s === lower(WANT.ocioConfig) || /aces[ _-]?v?1\.3/.test(s);
+    }
+
+    function customOcioFiles() {
+        /* The ACES 1.3 CG config as a file: installed next to the MNR
+           panels first, then the pipeline copy (any cg-config .ocio). */
+        var out = [];
+        try {
+            var installed = new File(Folder.startup.fsName + "/Scripts/ScriptUI Panels/" + OCIO_FILE);
+            if (installed.exists) { out.push(installed); }
+        } catch (e) {}
+        try {
+            var dir = new Folder(OCIO_PIPELINE_DIR);
+            var exact = new File(OCIO_PIPELINE_DIR + "/" + OCIO_FILE);
+            if (exact.exists) { out.push(exact); }
+            else if (dir.exists) {
+                var found = dir.getFiles("*.ocio");
+                for (var i = 0; i < found.length; i++) {
+                    if (/cg-config.*aces-v1\.3/i.test(File.decode(found[i].name))) { out.push(found[i]); }
+                }
+            }
+        } catch (e2) {}
+        return out;
+    }
+
+    function setOcio(p, report) {
+        /* ACES 1.3 CG v1.0: the built-in one, else the same config as a
+           custom file (older After Effects without it built in). */
+        var label = "OCIO Configuration: " + WANT.ocioConfig;
+        if (report.dry || !has(p, "ocioConfigurationFile")) {
+            setOne(p, report, label, "ocioConfigurationFile", WANT.ocioConfig, isAces13);
+            return;
+        }
+        var cur;
+        try { cur = p.ocioConfigurationFile; } catch (e) { cur = ""; }
+        if (isAces13(cur)) { report.done.push(label); return; }
+        try { p.ocioConfigurationFile = WANT.ocioConfig; } catch (e1) {}
+        try { cur = p.ocioConfigurationFile; } catch (e2) { cur = ""; }
+        if (isAces13(cur)) { report.done.push(label); return; }
+        var files = customOcioFiles();
+        for (var i = 0; i < files.length; i++) {
+            try { p.ocioConfigurationFile = files[i].fsName; } catch (e3) { continue; }
+            try { cur = p.ocioConfigurationFile; } catch (e4) { cur = ""; }
+            if (isAces13(cur)) {
+                report.done.push(label + " (custom file, not built into this version: " + files[i].fsName + ")");
+                return;
+            }
+        }
+        report.missed.push(label + " (not built into this version and the custom " + OCIO_FILE +
+            (files.length ? " did not take" : " was not found") + ", now " + cur + ")");
+    }
+
     // Picks the entry from listColorProfiles() that matches the one we
     // want: exact name first, then any ACEScg one (not ACEScct).
     function pickProfile(p, want, mustContain, mustNotContain) {
@@ -149,8 +212,7 @@
         // ── Color. The engine and config go first, the colour space
         // lists depend on them.
         setOne(p, report, "Color Engine: OCIO color managed", "colorManagementSystem", 1);
-        setOne(p, report, "OCIO Configuration: " + WANT.ocioConfig, "ocioConfigurationFile", WANT.ocioConfig,
-               function (v) { return v === WANT.ocioConfig || lower(v).indexOf("aces 1.3") >= 0; });
+        setOcio(p, report);
         setOne(p, report, "Bit Depth: 32 bpc", "bitsPerChannel", 32);
         setOne(p, report, "3D LUT Interpolation: Tetrahedral", "lutInterpolationMethod", 1);
 

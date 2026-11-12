@@ -35,7 +35,10 @@ MNR project settings (`src/MNR_Project_Settings_Startup.jsx`, also in
 every New project from the Scene Manager: Timecode with Use Media
 Source, OCIO color managed with ACES 1.3 CG v1.0, 32 bpc, Tetrahedral,
 working space ACEScg, linearize and 1.0 gamma blending off, compensate
-for scene-referred profiles on. Existing projects are never changed.
+for scene-referred profiles on. Where an After Effects version does
+not have ACES 1.3 CG v1.0 built in, the same config is loaded as a custom
+OCIO file, `src/cg-config-v1.0.0_aces-v1.3_ocio-v2.1.ocio` (installed next
+to the panels), else the copy in `P:\02-pipeline\colorManagement\aces_1.3_CG_v1.0\`. Existing projects are never changed.
 Default Base (12) and Display Color Space have no scripting access, and
 anything that did not take is listed in
 `%APPDATA%\MNR_Launcher\ae_startup.log`.
@@ -140,8 +143,9 @@ Interpret Footage > Color, but replacing a footage item's file keeps its
 interpretation, so the importer copies a footage item named
 `MNR ACEScg` (set to ACEScg) out of `MNR_Import_Presets_<year>_v###.aep`
 (next to the panel, else `P:\02-pipeline\apps\afterEffects\presets\`)
-and swaps in the TIFFs. One saved in the oldest After Effects in use
-works in the newer ones. Logged to `%APPDATA%\MNR_Launcher\ae_importer.log`.
+and swaps in the TIFFs. There is one per version (2024, 2025, 2026, saved down from 2026), installed by MNR
+Launcher with `MNR_ACEScg_reference.tif`, the tiny 16-bit float TIFF it
+points at. Logged to `%APPDATA%\MNR_Launcher\ae_importer.log`.
 
 ## MNR AE Exporter
 
