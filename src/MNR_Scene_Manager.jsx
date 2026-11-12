@@ -6,10 +6,10 @@
     // to main. MNR Launcher reads these four lines out of the installed
     // file, so they stay at the very top. Change only version_base in
     // build/plugin.json by hand.
-    var PLUGIN_VERSION = "0.3.84";
+    var PLUGIN_VERSION = "0.3.86";
     var PLUGIN_CHANNEL = "main";
-    var PLUGIN_BUILT = "2026-11-12 06:54 UTC";
-    var PLUGIN_COMMIT = "2c2b7f2";
+    var PLUGIN_BUILT = "2026-11-12 07:04 UTC";
+    var PLUGIN_COMMIT = "a2c2d2b";
     // ───────────────────────────────────────────────────────────────
 
     /*
