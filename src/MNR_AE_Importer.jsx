@@ -935,7 +935,7 @@
         optAces.helpTip = "Copies Interpret Footage > Color from the \"MNR ACEScg\" footage in\n" +
             "MNR_Import_Presets_<year>_v###.aep (scripts cannot set colour directly).";
         var settingsNote = label(s3, "");
-        settingsNote.characters = 70;
+        settingsNote.characters = 110;
         var acesNote = label(s3, "");
         acesNote.characters = 70;
         var binNote = label(s3, "");
@@ -1025,7 +1025,8 @@
             var bad = settingsProblems();
             settingsNote.text = bad === null ? "MNR_Project_Settings_Startup.jsx did not load, project settings are not checked." :
                 (bad.length ? "Project settings not MNR (" + bad.join(", ") + "), they are set on Import." :
-                 "Project settings are MNR (ACES 1.3 CG, ACEScg, 32 bpc, timecode).");
+                 "Project settings are MNR (ACES 1.3 CG, ACEScg, 32 bpc, timecode).") +
+                "  Display Color Space can't be set by a script: check it's sRGB - Display / Un-tone-mapped.";
             styleText(settingsNote, bad && !bad.length ? C_DIM : C_WARN, 11, false);
             var presets = findPresetsFile();
             st.presets = presets;

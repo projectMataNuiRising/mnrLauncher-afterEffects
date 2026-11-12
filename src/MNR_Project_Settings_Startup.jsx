@@ -183,6 +183,39 @@
         return null;
     }
 
+    function isAcesCg(v) {
+        var s = lower(v || "");
+        return s.indexOf("acescg") >= 0 || s.indexOf("lin_ap1") >= 0;
+    }
+
+    function setWorkingSpace(p, report) {
+        /* ACEScg. In OCIO mode listColorProfiles() can still list the
+           Adobe (ICC) profiles, so the OCIO names are tried as well, and
+           whatever reads back as ACEScg wins. */
+        var label = "Working Color Space: " + WANT.workingSpace;
+        var cur;
+        try { cur = p.workingSpace; } catch (e) { cur = ""; }
+        if (report.dry) {
+            if (has(p, "workingSpace") && !isAcesCg(cur)) { report.differ.push("Working Color Space"); }
+            return;
+        }
+        if (!has(p, "workingSpace")) { report.missed.push(label + " (no scripting access in this version)"); return; }
+        if (isAcesCg(cur)) { report.done.push(label); return; }
+        var tries = [];
+        var listed = pickProfile(p, WANT.workingSpace, "acescg", "acescct");
+        if (listed) { tries.push(listed); }
+        tries.push(WANT.workingSpace, "ACEScg", "ACES - ACEScg", "lin_ap1");
+        for (var i = 0; i < tries.length; i++) {
+            try { p.workingSpace = tries[i]; } catch (e1) { continue; }
+            try { cur = p.workingSpace; } catch (e2) { cur = ""; }
+            if (isAcesCg(cur)) { report.done.push("Working Color Space: " + cur); return; }
+        }
+        var list = [];
+        try { list = p.listColorProfiles(); } catch (e3) {}
+        report.missed.push(label + " (did not take, now \"" + cur + "\"; tried " + tries.join(" / ") +
+            "; listColorProfiles: " + list.slice(0, 12).join(" | ") + ")");
+    }
+
     function applyTo(p, given) {
         var report = given || { done: [], missed: [] };
         if (!p) { report.missed.push("no project open"); return report; }
@@ -216,12 +249,7 @@
         setOne(p, report, "Bit Depth: 32 bpc", "bitsPerChannel", 32);
         setOne(p, report, "3D LUT Interpolation: Tetrahedral", "lutInterpolationMethod", 1);
 
-        var ws = pickProfile(p, WANT.workingSpace, "acescg", "acescct");
-        if (ws) {
-            setOne(p, report, "Working Color Space: " + ws, "workingSpace", ws);
-        } else {
-            report.missed.push("Working Color Space: " + WANT.workingSpace + " (not in the list of spaces)");
-        }
+        setWorkingSpace(p, report);
 
         if (has(p, "displayColorSpace")) {
             setOne(p, report, "Display Color Space: " + WANT.displaySpace, "displayColorSpace", WANT.displaySpace);
