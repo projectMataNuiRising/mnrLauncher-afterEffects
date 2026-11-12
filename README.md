@@ -94,7 +94,7 @@ and works on a machine with no pCloud mounted.
 ## MNR Toolbar
 
 `src/MNR_Toolbar.jsx` is a shelf of icon buttons, like Maya's and
-Houdini's: Scene Manager, AE Exporter, Find Missing Footage (look for
+Houdini's: Scene Manager, AE Importer, AE Exporter, Find Missing Footage (look for
 moved footage now) and Project Settings (set the MNR settings on the open project).
 Open it from Window > MNR_Toolbar.jsx and dock it along the top or side;
 it stays with the workspace. Docked taller than wide, it turns into a
@@ -111,6 +111,31 @@ into `exr\`, `_Proxy` folders to `-proxy` with `png\`). Found ones are
 listed (was / now) and replaced only when the artist says so, keeping the
 footage's frame rate and alpha interpretation. Logged to
 `%APPDATA%\MNR_Launcher\ae_relink.log`.
+
+## MNR AE Importer
+
+`src/MNR_AE_Importer.jsx` brings a shot's stop-motion TIFF sequences into
+the open project. The shot comes from where the `.aep` lives (as the
+Scene Manager saves it); "From" is the task they are published from
+(`rotoKeyIngest` by default). Every sequence in
+`<task>\export\publish\media\<name>\tif\` is listed with a tick box
+(latest version of each layer only, unless unticked) with its frames,
+the frame rate of `<name>.mp4` and the TIFF's bit depth and colour, read
+from the file headers. Ones already in the project are not ticked.
+
+Import brings in each ticked sequence at the MP4's frame rate (12 fps
+when there is no MP4; anything but 12 or 24 is warned about first), and
+makes a comp named like the folder, numbered from the first TIFF frame
+(1001...) so the Exporter numbers renders the same. Bins: `01_comps`,
+`02_footage\<task>`, `03_precomps`.
+
+Scene linear (float) TIFFs are set to ACEScg. Scripts cannot set
+Interpret Footage > Color, but replacing a footage item's file keeps its
+interpretation, so the importer copies a footage item named
+`MNR ACEScg` (set to ACEScg) out of `MNR_Import_Presets_<year>_v###.aep`
+(next to the panel, else `P:\02-pipeline\apps\afterEffects\presets\`)
+and swaps in the TIFFs. One saved in the oldest After Effects in use
+works in the newer ones. Logged to `%APPDATA%\MNR_Launcher\ae_importer.log`.
 
 ## MNR AE Exporter
 
@@ -163,14 +188,14 @@ Effects. It downloads the panel straight from this repository, so
 whatever is on `main` is what gets installed.
 
 To install by hand, copy `src/MNR_Scene_Manager.jsx`,
-`src/MNR_AE_Exporter.jsx` and `src/MNR_Toolbar.jsx` into the ScriptUI Panels path above and
+`src/MNR_AE_Importer.jsx`, `src/MNR_AE_Exporter.jsx` and `src/MNR_Toolbar.jsx` into the ScriptUI Panels path above and
 restart After Effects. They then appear in the `Window` menu.
 (`MNR_Scene_Manager.jsx` used to be called `MNR_Launcher_Panel.jsx`.)
 
 ## Layout
 
 ```
-src/     the panels (MNR_Scene_Manager.jsx, MNR_AE_Exporter.jsx,
+src/     the panels (MNR_Scene_Manager.jsx, MNR_AE_Importer.jsx, MNR_AE_Exporter.jsx,
          MNR_Toolbar.jsx) and
          the Scripts\Startup files, all installed by MNR Launcher
 tools/   one-time admin scripts, not installed

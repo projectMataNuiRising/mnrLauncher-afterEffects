@@ -14,6 +14,7 @@
         BUTTONS
 
             Scene Manager     opens the MNR Scene Manager panel
+            AE Importer       opens the MNR AE Importer panel
             AE Exporter       opens the MNR AE Exporter panel
             Missing Footage   looks for missing footage that was moved or
                               renamed (MNR_Relink_Startup.jsx)
@@ -39,6 +40,7 @@
     var GREY_DARK = [[0.56, 0.56, 0.56], [0.42, 0.42, 0.42]];
     var BLUE = [[0.50, 0.72, 1.00], [0.20, 0.45, 0.85]];
     var ORANGE = [[1.00, 0.76, 0.32], [0.90, 0.52, 0.12]];
+    var GREEN = [[0.52, 0.92, 0.58], [0.20, 0.64, 0.34]];
     var BARS = [[0.80, 0.80, 0.80], [0.82, 0.77, 0.36], [0.36, 0.74, 0.78],
                 [0.38, 0.70, 0.40], [0.74, 0.40, 0.70], [0.76, 0.38, 0.36]];
 
@@ -111,6 +113,17 @@
                 var t = (y - 10) / 9;
                 return [6 - 3 * t, 23 - 2 * t];
             }, GREY);
+        },
+        importer: function (p) {
+            // A green arrow coming down into a tray (import).
+            p.rect(3, 13, 5.5, 21, GREY);
+            p.rect(18.5, 13, 21, 21, GREY);
+            p.rect(3, 18.5, 21, 21, GREY);
+            p.grad(2, 17, function (y) {
+                if (y < 9) { return [10, 14]; }
+                var w = 7 * (17 - y) / 8;
+                return [12 - w, 12 + w];
+            }, GREEN);
         },
         exporter: function (p) {
             // A blue arrow going up out of a tray (publish).
@@ -250,6 +263,8 @@
 
         iconButton(bar, "sceneManager", "MNR Scene Manager\nOpen, save and version up shot files",
             function () { openPanel("MNR_Scene_Manager.jsx"); });
+        iconButton(bar, "importer", "MNR AE Importer\nBring in the shot's TIFF sequences, with comps",
+            function () { openPanel("MNR_AE_Importer.jsx"); });
         iconButton(bar, "exporter", "MNR AE Exporter\nPublish renders: EXR, MP4 preview, proxy PNG",
             function () { openPanel("MNR_AE_Exporter.jsx"); });
         iconButton(bar, "relink", "Find Missing Footage\nRelink footage that was moved or renamed",

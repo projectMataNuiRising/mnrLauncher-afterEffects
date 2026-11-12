@@ -20,7 +20,7 @@ import json
 import re
 import sys
 
-PANELS = ("src/MNR_Scene_Manager.jsx", "src/MNR_AE_Exporter.jsx")
+PANELS = ("src/MNR_Scene_Manager.jsx", "src/MNR_AE_Exporter.jsx", "src/MNR_AE_Importer.jsx")
 MANIFEST = "build/plugin.json"
 
 
