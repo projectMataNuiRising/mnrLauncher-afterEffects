@@ -94,11 +94,12 @@ and works on a machine with no pCloud mounted.
 ## MNR Toolbar
 
 `src/MNR_Toolbar.jsx` is a shelf of icon buttons, like Maya's and
-Houdini's: Scene Manager, AE Exporter, Relink (look for moved footage
-now) and Project Settings (set the MNR settings on the open project).
+Houdini's: Scene Manager, AE Exporter, Find Missing Footage (look for
+moved footage now) and Project Settings (set the MNR settings on the open project).
 Open it from Window > MNR_Toolbar.jsx and dock it along the top or side;
 it stays with the workspace. Docked taller than wide, it turns into a
-column. The icons are drawn in code, so there are no image files.
+column. The icons are drawn in code (gradients as thin strips), so
+there are no image files.
 
 ## MNR Relink
 
