@@ -31,10 +31,12 @@
                its frames, the MP4's frame rate and the TIFF's bit depth.
                Ones already in the project are listed but not ticked.
             3. Import brings in the ticked ones:
-                 - the TIFF sequence, at the MP4's frame rate
-                   (<name>.mp4 next to its folder). Not 12 or 24 fps, or no
-                   MP4 (12 fps is used), is warned about first. The MP4 is
-                   only read, not imported.
+                 - the TIFF sequence, at the MP4's frame rate (<name>.mp4
+                   next to its folder, or the smAnim one, as the move to
+                   rotoKeyIngest left the MP4s there). Not 12 or 24 fps is
+                   warned about first. With no MP4 the row gets a 12 / 24
+                   fps list (12 to start). The MP4 is only read, not
+                   imported.
                  - Interpret Footage colour set to ACEScg when the TIFF is
                    scene linear (16 / 32-bit float, read from the file),
                    else a warning.
@@ -278,9 +280,14 @@
 
     function fpsText(f) { return String(Math.round(f * 1000) / 1000); }
 
-    function findMp4(media, folder) {
-        /* The MP4 that goes with a TIFF folder: <name>.mp4 next to the
-           folder, else inside it (or its mp4 folder). "" when none. */
+    function swapTask(name, from, to) {
+        /* BFP102_SQ04_SH12_rotoKeyIngest_onua01-main_v001 -> ..._smAnim_... */
+        var t = String(name).split("_");
+        if (t.length >= 6 && lower(t[3]) === lower(from)) { t[3] = to; }
+        return t.join("_");
+    }
+
+    function findMp4Here(media, folder) {
         var tries = [join(media, folder + ".mp4"), join(media, folder, folder + ".mp4"),
                      join(media, folder, "mp4", folder + ".mp4")];
         for (var i = 0; i < tries.length; i++) {
@@ -294,6 +301,19 @@
             }
         }
         return "";
+    }
+
+    function findMp4(ctx, task, folder) {
+        /* The MP4 that goes with a TIFF folder: <name>.mp4 next to the
+           folder, else inside it (or its mp4 folder), else the same in the
+           other source tasks (the smAnim -> rotoKeyIngest move took only
+           the TIFFs). "" when none. */
+        var found = findMp4Here(mediaDir(ctx, task), folder);
+        for (var i = 0; !found && i < SOURCE_TASKS.length; i++) {
+            if (SOURCE_TASKS[i] === task) { continue; }
+            found = findMp4Here(mediaDir(ctx, SOURCE_TASKS[i]), swapTask(folder, task, SOURCE_TASKS[i]));
+        }
+        return found;
     }
 
     // ─────────────────────────────────────────────
@@ -461,7 +481,7 @@
             var frames = tifFrames(names, stem);
             if (!frames.length) { continue; }
             var first = frames[0].n, last = frames[frames.length - 1].n;
-            var mp4 = findMp4(media, dirs[i]);
+            var mp4 = findMp4(ctx, task, dirs[i]);
             var info = tiffInfo(join(tifDir, frames[0].name));
             out.push({
                 folder: dirs[i], tifDir: tifDir, stem: stem,
@@ -504,8 +524,9 @@
 
     function seqWarnings(seq) {
         var w = [];
-        if (!seq.mp4) { w.push("no MP4, the comp will be " + DEFAULT_FPS + " fps"); }
-        else if (seq.fps && fpsProblem(seq.fps)) { w.push(fpsProblem(seq.fps)); }
+        if (!seq.mp4) { w.push("no MP4, pick the fps"); }
+        else if (!seq.fps) { w.push("could not read the MP4's fps, pick it"); }
+        else if (fpsProblem(seq.fps)) { w.push(fpsProblem(seq.fps)); }
         if (seq.gaps) { w.push(seq.gaps + (seq.gaps === 1 ? " frame" : " frames") + " missing"); }
         if (seq.colour.warn) { w.push(seq.colour.warn); }
         return w;
@@ -677,7 +698,7 @@
     function importSequence(seq, opts, bins, presets) {
         /* Imports one sequence (and its comp). Returns {comp, notes}. */
         var notes = [];
-        var fps = seq.fps || DEFAULT_FPS;
+        var fps = seq.useFps || seq.fps || DEFAULT_FPS;
         var file = new File(join(seq.tifDir, seq.frames[0].name));
         var item = null;
         if (opts.aces && seq.colour.aces && presets) {
@@ -975,11 +996,23 @@
                 cb.helpTip = seq.tifDir.replace(/\//g, "\\");
                 var d = label(r, seqDetails(seq));
                 styleText(d, C_WHITE, 11, false);
+                var fpsList = null;
+                if (!seq.fps) {
+                    // No MP4 to read it from: the artist picks it.
+                    fpsList = r.add("dropdownlist", undefined, []);
+                    for (var f = 0; f < PIPELINE_FPS.length; f++) { fpsList.add("item", PIPELINE_FPS[f] + " fps"); }
+                    fpsList.selection = 0;
+                    for (var g = 0; g < PIPELINE_FPS.length; g++) {
+                        if (PIPELINE_FPS[g] === DEFAULT_FPS) { fpsList.selection = g; }
+                    }
+                    fpsList.preferredSize = [72, 22];
+                    fpsList.helpTip = "No MP4 to read the frame rate from, so pick it.";
+                }
                 var warns = seqWarnings(seq);
                 if (already) { warns.unshift("already in this project"); }
                 var w = label(r, warns.join(",  "));
                 styleText(w, already ? C_DIM : C_WARN, 11, false);
-                st.rows.push(cb);
+                st.rows.push({ cb: cb, fps: fpsList });
             }
             var bad = settingsProblems();
             settingsNote.text = bad === null ? "MNR_Project_Settings_Startup.jsx did not load, project settings are not checked." :
@@ -998,13 +1031,16 @@
         }
 
         function tickAll(value) {
-            for (var i = 0; i < st.rows.length; i++) { st.rows[i].value = value; }
+            for (var i = 0; i < st.rows.length; i++) { st.rows[i].cb.value = value; }
         }
 
         function picked() {
             var out = [];
             for (var i = 0; i < st.rows.length; i++) {
-                if (st.rows[i].value) { out.push(st.seqs[i]); }
+                if (!st.rows[i].cb.value) { continue; }
+                var seq = st.seqs[i];
+                seq.useFps = st.rows[i].fps ? PIPELINE_FPS[st.rows[i].fps.selection ? st.rows[i].fps.selection.index : 0] : 0;
+                out.push(seq);
             }
             return out;
         }
@@ -1015,8 +1051,7 @@
             if (!todo.length) { say("Tick at least one sequence.", false); return; }
             var warn = [];
             for (var i = 0; i < todo.length; i++) {
-                var fpsWarn = !todo[i].mp4 ? "no MP4, will be " + DEFAULT_FPS + " fps" :
-                    (todo[i].fps ? fpsProblem(todo[i].fps) : "could not read the MP4's fps, will be " + DEFAULT_FPS + " fps");
+                var fpsWarn = todo[i].fps ? fpsProblem(todo[i].fps) : "";
                 if (fpsWarn) { warn.push(seqLabel(todo[i]) + ":  " + fpsWarn); }
                 if (footageIn(todo[i].tifDir)) { warn.push(seqLabel(todo[i]) + ":  already in this project"); }
             }
