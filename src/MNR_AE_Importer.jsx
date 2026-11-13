@@ -605,6 +605,23 @@
         return user || $.getenv("USERNAME") || "user";
     }
 
+    function shotFromFootage() {
+        /* Unsaved project (e.g. "(converted)"): the shot of the first
+           footage in it that lives in a shot folder, or null. */
+        var found = null;
+        findIn(app.project.rootFolder, function (it) {
+            try {
+                if (!(it instanceof FootageItem) || !(it.mainSource instanceof FileSource) || !it.mainSource.file) {
+                    return false;
+                }
+                var x = parseAepPath(it.mainSource.file.fsName);
+                if (x.sh) { found = x; return true; }
+            } catch (e) {}
+            return false;
+        });
+        return found;
+    }
+
     function lastSceneManagerProject() {
         try {
             return app.settings.haveSetting(SCENE_MANAGER_SETTINGS, "lastProject") ?
@@ -858,6 +875,7 @@
 
     function buildUI(thisObj) {
         var here = parseAepPath(openProjectPath());
+        if (!here.sh) { here = shotFromFootage() || here; }
         if (!here.project) { here = { project: lastSceneManagerProject() || DEFAULT_PROJECT }; }
         var st = { seqs: [], rows: [], busy: false };
 

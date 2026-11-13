@@ -1413,6 +1413,16 @@
             framesChanged();
             var g = guessLayer(c);
             layerText.text = g.layer;
+            // Unsaved project (e.g. "(converted)"): the shot comes from where
+            // the comp's TIFFs live, published to the default task.
+            if (!here.sh && g.from === "tif") {
+                var t = parseAepPath(g.folder);
+                if (t.sh && (t.project !== ddValue(projectList) || t.ep !== ddValue(epList) ||
+                        t.sq !== ddValue(sqList) || t.sh !== ddValue(shList))) {
+                    fillShot(0, { project: t.project, ep: t.ep, sq: t.sq, sh: t.sh, task: ddValue(taskList) || DEFAULT_TASK });
+                }
+                st.shotFromTif = !!t.sh;
+            }
             if (g.from === "tif") {
                 srcValue.text = g.stem + ".####.tif   in   " +
                     g.folder.replace(/^.*\/(rotoKeyIngest|smAnim)\//i, "...\\$1\\").replace(/\//g, "\\");
@@ -1729,7 +1739,9 @@
         anyTask.value = !!(here.task && !inList(AE_TASKS, here.task));
         fillShot(0, here);
         compChanged();
-        say(openProjectPath() ? "" : "Save the project first to fill in the shot by itself.");
+        say(openProjectPath() ? "" : (st.shotFromTif ?
+            "Project not saved: shot taken from the comp's TIFFs, check the task." :
+            "Save the project first to fill in the shot by itself."));
 
         win.layout.layout(true);
         win.onResizing = win.onResize = function () { this.layout.resize(); };
