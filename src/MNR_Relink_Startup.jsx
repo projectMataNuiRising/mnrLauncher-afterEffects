@@ -123,6 +123,8 @@
                 var base = shotDir + task + "/export/publish/media/";
                 add(base + fixed.name + "/" + sub + newFile);
                 add(base + fixed.name + "/" + rest);
+                // TIFFs may sit in a tif folder inside it now.
+                if (!sub && /\.tiff?$/i.test(file)) { add(base + fixed.name + "/tif/" + newFile); }
                 // A typo in the folder's layer name was fixed from the files
                 // (pohatuk01 folder holding pohatu01 files -> pohatu01).
                 var fm = file.match(/^(.+?_v\d+)(.*)$/i);
@@ -342,6 +344,7 @@
         var buttons = d.add("group");
         buttons.alignment = ["right", "bottom"];
         var never = buttons.add("button", undefined, "Not for this project");
+        never.enabled = !!projectPath;
         var later = buttons.add("button", undefined, "Not now", { name: "cancel" });
         var ok = buttons.add("button", undefined, "Replace", { name: "ok" });
         var choice = 0;
@@ -368,15 +371,18 @@
         /* Looks for moved / renamed publishes in the open project. force: also
            when "Not for this project" was picked before. */
         try {
-            if (!app.project || !app.project.file) { return 0; }
-            var projectPath = app.project.file.fsName;
-            if (!force && getSetting(skipKey(projectPath)) === "1") { return 0; }
+            if (!app.project) { return 0; }
+            // Unsaved projects too (e.g. "(converted)" ones opened from an
+            // older After Effects), checked when asked from the toolbar.
+            var projectPath = app.project.file ? app.project.file.fsName : "";
+            if (!projectPath && !force) { return 0; }
+            if (projectPath && !force && getSetting(skipKey(projectPath)) === "1") { return 0; }
             var hits = findMoved();
             if (!hits.length) {
                 if (force) { alert("No missing footage was found in a new place.", "MNR Relink"); }
                 return 0;
             }
-            log(projectPath + ": " + hits.length + " found");
+            log((projectPath || "unsaved project") + ": " + hits.length + " found");
             var picked = ask(hits, projectPath);
             if (!picked || !picked.length) { return 0; }
             var done = 0, failed = [];

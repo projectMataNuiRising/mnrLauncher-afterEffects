@@ -280,8 +280,8 @@
 
     function relink() {
         if (!needs("mnrRelinkCheck", "MNR_Relink_Startup.jsx")) { return; }
-        if (!app.project || !app.project.file) {
-            alert("Open or save a project first.", PANEL_NAME);
+        if (!app.project || !app.project.numItems) {
+            alert("Open a project first.", PANEL_NAME);
             return;
         }
         $.global.mnrRelinkCheck(true);
